@@ -1,7 +1,8 @@
-// Seeded randomness for Vice Bay (mulberry32). One seed builds the same city,
-// the same parked cars and the same screenshot scenes every time, which is what
-// makes the game — and its screenshots — repeatable. Runtime-only variety that
-// must not change the world uses plain Math.random through randomRange() instead.
+// Seeded randomness for Vice Bay (mulberry32), rewritten for the v4 recorded
+// pass. One seed builds the same city, the same parked cars and the same
+// screenshot scenes every time, which is what makes the game — and its
+// screenshots — repeatable. Runtime-only variety that must not change the world
+// uses plain Math.random through randomRange() instead.
 export function createRandom(seed) {
   let a = seed | 0;
   function random() {
@@ -23,6 +24,13 @@ export function createRandom(seed) {
       out[j] = tmp;
     }
     return out;
+  };
+  // Bell-ish pick around the middle of a range, for heights and prices that
+  // should cluster instead of spreading evenly.
+  random.gauss = (min, max) => {
+    const mid = (min + max) / 2;
+    const spread = (max - min) / 4;
+    return Math.max(min, Math.min(max, mid + (random() + random() + random() - 1.5) * spread));
   };
   return random;
 }

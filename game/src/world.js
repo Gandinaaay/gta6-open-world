@@ -1,8 +1,10 @@
-// The world: builds the renderer, the sky and the day/night cycle, rain, the
-// city, the player, traffic, police, combat and missions, and steps them all in
-// one place. Nothing here knows about menus — main.js owns the screens and
-// calls update(). The game state object G is the one thing every module shares.
-import { WORLD, STEP, DAY_LENGTH, KEYS, districtAt } from './config.js';
+// The world, rewritten for the v4 recorded pass: builds the renderer, the sky
+// and the day/night cycle, rain, the city, the player, traffic, police, combat
+// and missions, and steps them all in one place. Nothing here knows about menus
+// — main.js owns the screens and calls update(). The game state object G is the
+// one thing every module shares. New in v4: a sunset sun disc that hangs low at
+// dawn and dusk, and a wanted sting the moment a new star lands.
+import { WORLD, STEP, DAY_LENGTH, KEYS, districtAt, SUNSET_WINDOW, WANTED_FLASH_TIME } from './config.js';
 import { createRandom } from './random.js';
 import { createAudio } from './audio.js';
 import { buildCity, PLACES, SHOPS } from './city.js';
@@ -14,6 +16,7 @@ import { createCombat, updateEnemies } from './combat.js';
 import { createMissionEngine, SIDE_MISSIONS } from './missions.js';
 import { createHud, showToast } from './hud.js';
 import { saveGame, loadGame, openShop, openGarage } from './save.js';
+import { sunsetTexture } from './textures.js';
 
 export function createGame(canvas, seed) {
   const random = createRandom(seed);
@@ -40,6 +43,15 @@ export function createGame(canvas, seed) {
   const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x3a4a3a, 0.5);
   scene.add(hemi);
 
+  // Sunset sun disc: a glowing billboard that follows the sun's direction and
+  // only shows while the sun is low, so dawn and dusk get a real horizon glow.
+  const sunDisc = new THREE.Mesh(
+    new THREE.PlaneGeometry(120, 120),
+    new THREE.MeshBasicMaterial({ map: sunsetTexture(), transparent: true, depthWrite: false, fog: false }),
+  );
+  sunDisc.visible = false;
+  scene.add(sunDisc);
+
   const city = buildCity(scene, random);
   const audio = createAudio();
   const player = createPlayer(scene);
@@ -59,7 +71,11 @@ export function createGame(canvas, seed) {
     settings: { volume: 0.6, quality: 'high', muted: false },
     time: 0, elapsed: 0,
   };
-  G.addWanted = (n) => addWanted(G, n);
+  G.addWanted = (n) => {
+    const before = G.wanted;
+    addWanted(G, n);
+    if (G.wanted > before && G.audio) G.audio.wantedSting();
+  };
   G.toast = (m) => showToast(G, m);
   G.saveGame = () => saveGame(G);
   G.damagePlayer = (amount, cause) => {
@@ -246,6 +262,18 @@ export function createGame(canvas, seed) {
     hemi.intensity = 0.25 + day * 0.35;
     const lampOn = elev < 0.05;
     for (const l of city.lamps) l.material.color.setHex(lampOn ? 0xffe9a8 : 0x555555);
+    // Sunset disc: show it while the sun hugs the horizon at dawn or dusk,
+    // placed far out along the sun's direction and always facing the camera.
+    const inWindow = (t >= SUNSET_WINDOW.from && t <= SUNSET_WINDOW.to) || (t >= 0.48 && t <= 0.56);
+    sunDisc.visible = inWindow;
+    if (inWindow) {
+      const fx = G.player.x + Math.cos(angle) * 420;
+      const fz = G.player.z + 180;
+      sunDisc.position.set(fx, 55 + elev * 40, fz);
+      sunDisc.lookAt(camera.position);
+      // Brighter at dawn, softer at dusk — the disc never outshines the city.
+      sunDisc.material.opacity = t < 0.25 ? 0.95 : 0.8;
+    }
   }
 
   function updateWeather(dt) {

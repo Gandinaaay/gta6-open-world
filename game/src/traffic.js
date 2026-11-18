@@ -1,6 +1,8 @@
-// Living streets: traffic cars that drive the road grid in their own lane and
-// stop at red lights, and pedestrians on the sidewalks who panic and run when
-// they see a crime. Traffic never runs out — cars wrap around the edge of the map.
+// Living streets, rewritten for the v4 recorded pass: traffic cars that drive
+// the road grid in their own lane and stop at red lights, and pedestrians on the
+// sidewalks who panic and run when they see a crime. Traffic never runs out —
+// cars wrap around the edge of the map. New in v4: pedestrians hurry for cover
+// in the rain, and traffic headlights are part of every car mesh.
 import { VEHICLE_TYPES } from './config.js';
 import { spawnVehicle } from './vehicles.js';
 import { districtAt } from './config.js';
@@ -142,12 +144,15 @@ export function updatePedestrians(G, dt, random) {
   const px = G.currentVehicle ? G.currentVehicle.x : G.player.x;
   const pz = G.currentVehicle ? G.currentVehicle.z : G.player.z;
   const playerSpeed = G.currentVehicle ? Math.abs(G.currentVehicle.speed) : G.player.speed;
+  const raining = G.weather === 'rain';
   for (const ped of G.peds) {
     const d = Math.hypot(ped.x - px, ped.z - pz);
     // Panic: a crime nearby, a speeding car, or a gunshot sends them running.
+    // In the rain they also hurry — nobody strolls in a Vice Bay downpour.
     if ((G.crimeFlash > 0 && d < 40) || (playerSpeed > 15 && d < 12) || (G.wanted >= 2 && d < 15)) {
       ped.panic = 3;
     }
+    const hurry = raining && ped.panic <= 0 ? 1.6 : 1;
     if (ped.panic > 0) {
       ped.panic -= dt;
       const away = Math.atan2(ped.x - px, ped.z - pz);
@@ -156,7 +161,7 @@ export function updatePedestrians(G, dt, random) {
       ped.z += Math.cos(away) * 6 * dt;
       ped.phase += dt * 14;
     } else {
-      ped.phase += dt * ped.speed * 3;
+      ped.phase += dt * ped.speed * 3 * hurry;
       if (!ped.walkTarget || Math.hypot(ped.x - ped.walkTarget.x, ped.z - ped.walkTarget.z) < 3) {
         ped.walkTarget = { x: ped.x + random.range(-60, 60), z: ped.z + random.range(-60, 60) };
       }
@@ -165,8 +170,8 @@ export function updatePedestrians(G, dt, random) {
       while (dy > Math.PI) dy -= Math.PI * 2;
       while (dy < -Math.PI) dy += Math.PI * 2;
       ped.yaw += Math.max(-2 * dt, Math.min(2 * dt, dy));
-      ped.x += Math.sin(ped.yaw) * ped.speed * dt;
-      ped.z += Math.cos(ped.yaw) * ped.speed * dt;
+      ped.x += Math.sin(ped.yaw) * ped.speed * hurry * dt;
+      ped.z += Math.cos(ped.yaw) * ped.speed * hurry * dt;
     }
     ped.x = Math.max(-490, Math.min(490, ped.x));
     ped.z = Math.max(-490, Math.min(490, ped.z));

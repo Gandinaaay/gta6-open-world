@@ -1,8 +1,10 @@
-// The HUD: health bar, money, reputation, wanted stars, speed, compass, mission
-// objective with a live distance to the marker, toasts, briefing panel, shop and
-// pause panels — all DOM over the 3D canvas — plus the live minimap drawn on a
-// 2D canvas every frame. DOM text is only rewritten when its value actually
-// changes, so the HUD costs almost nothing per frame.
+// The HUD, rewritten for the v4 recorded pass: health bar, money, reputation,
+// wanted stars, speed, compass, mission objective with a live distance to the
+// marker, toasts, briefing panel, shop and pause panels — all DOM over the 3D
+// canvas — plus the live minimap drawn on a 2D canvas every frame. DOM text is
+// only rewritten when its value actually changes, so the HUD costs almost
+// nothing per frame. New in v4: the wanted stars flash while the heat is fresh
+// (G.crimeFlash), so a new star is impossible to miss.
 import { DISTRICTS } from './config.js';
 
 export function createHud(G) {
@@ -86,11 +88,12 @@ export function createHud(G) {
       const pz = G.currentVehicle ? G.currentVehicle.z : G.player.z;
       objective += ' · ' + Math.round(Math.hypot(target.x - px, target.z - pz) * 2) + 'm';
     }
+    const flashing = G.crimeFlash > 0 && G.wanted > 0;
     const html = [
       G.player.health, Math.floor(G.money), G.rep, stars, Math.round(speed),
       compass, district, objective, G.currentVehicle ? G.currentVehicle.type.name : 'On foot',
       G.combat ? G.combat.weapon : '', G.combat ? (G.combat.ammo[G.combat.weapon] ?? '∞') : '',
-      G.interactPrompt || '',
+      G.interactPrompt || '', flashing ? 'flash' : '',
     ].join('|');
     if (html !== lastHtml) {
       lastHtml = html;
@@ -102,6 +105,7 @@ export function createHud(G) {
       const starsEl = document.getElementById('stars');
       starsEl.textContent = stars;
       starsEl.style.color = G.wanted > 0 ? '#ffd23f' : '#888';
+      starsEl.classList.toggle('flash', flashing);
       document.getElementById('speed').textContent = Math.round(speed) + ' km/h';
       document.getElementById('compass').textContent = compass + ' · ' + district;
       document.getElementById('objective').textContent = objective;

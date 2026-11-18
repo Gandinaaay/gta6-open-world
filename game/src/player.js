@@ -1,6 +1,8 @@
-// The hero on foot: a low-poly articulated figure (head, torso, arms, legs)
-// whose limbs swing with the stride, plus walk / run / sprint / jump / crouch
-// and the smooth third-person camera that follows him — and the car — everywhere.
+// The hero on foot, rewritten for the v4 recorded pass: a low-poly articulated
+// figure (head, torso, arms, legs) whose limbs swing with the stride, plus walk
+// / run / sprint / jump / crouch and the smooth third-person camera that follows
+// him — and the car — everywhere. New in v4: a landing squash that sells the
+// jump, and a strafe lean so sidesteps read on screen.
 import { WORLD, KEYS } from './config.js';
 import { collideCircle, clampToWorld } from './city.js';
 
@@ -36,7 +38,7 @@ export function createPlayer(scene, shirtColor = 0x8a2be2) {
     group, torso, head, armL, armR, legL, legR,
     x: 0, z: 120, y: 0, yaw: Math.PI, vy: 0, onGround: true,
     speed: 0, walkPhase: 0, crouching: false, health: 100,
-    shirtColor,
+    shirtColor, landSquash: 0,
   };
   group.position.set(player.x, 0, player.z);
   return player;
@@ -78,7 +80,7 @@ export function updatePlayer(G, dt) {
   p.x = clamped.x;
   p.z = clamped.z;
 
-  // Jump: simple gravity, land back on the ground.
+  // Jump: simple gravity, land back on the ground with a squash.
   if (keys[KEYS.jump] && p.onGround && !crouch) {
     p.vy = 7.5;
     p.onGround = false;
@@ -86,11 +88,12 @@ export function updatePlayer(G, dt) {
   if (!p.onGround) {
     p.vy -= 22 * dt;
     p.y += p.vy * dt;
-    if (p.y <= 0) { p.y = 0; p.vy = 0; p.onGround = true; }
+    if (p.y <= 0) { p.y = 0; p.vy = 0; p.onGround = true; p.landSquash = 1; }
   }
+  p.landSquash = Math.max(0, (p.landSquash || 0) - dt * 5);
 
   // Walk-cycle: limbs swing opposite, arms counter the legs, and the body leans
-  // a touch forward at a sprint.
+  // a touch forward at a sprint and sideways into a strafe.
   if (p.speed > 0.3) p.walkPhase += dt * p.speed * 1.6;
   const swing = Math.min(1, p.speed / 6) * 0.7;
   const s = Math.sin(p.walkPhase);
@@ -99,7 +102,9 @@ export function updatePlayer(G, dt) {
   p.armL.rotation.x = -s * swing * 0.8;
   p.armR.rotation.x = s * swing * 0.8;
   p.torso.rotation.x = p.speed > 9 ? 0.12 : 0;
-  p.group.scale.y = crouch ? 0.72 : 1;
+  const strafe = (keys[KEYS.right] ? 1 : 0) - (keys[KEYS.left] ? 1 : 0);
+  p.torso.rotation.z = -strafe * 0.08 * Math.min(1, p.speed / 5);
+  p.group.scale.y = (crouch ? 0.72 : 1) * (1 - 0.18 * (p.landSquash || 0));
   p.group.position.set(p.x, p.y, p.z);
   p.group.rotation.y = p.yaw;
   return p.speed;

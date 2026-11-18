@@ -1,7 +1,9 @@
-// Save and the economy: localStorage progress, and the four shops — Bay Arms
-// (weapons and ammo), Vice Motors (buy cars into your garage), Style House
-// (clothes) and the Tuner Garage (vehicle upgrades). The same panel serves the
-// shops and the garage; only its title and rows change.
+// Save and the economy, rewritten for the v4 recorded pass: localStorage
+// progress, and the four shops — Bay Arms (weapons and ammo), Vice Motors (buy
+// cars into your garage), Style House (clothes) and the Tuner Garage (vehicle
+// upgrades). The same panel serves the shops and the garage; only its title and
+// rows change. New in v4: the save also remembers the time of day and the
+// weather, so Continue resumes the same sky you left.
 import { SAVE_KEY, WEAPONS, VEHICLE_TYPES, CLOTHES, UPGRADES } from './config.js';
 import { setShirtColor } from './player.js';
 import { spawnVehicle } from './vehicles.js';
@@ -15,6 +17,7 @@ export function saveGame(G) {
       upgrades: G.upgrades, shirt: G.player.shirtColor,
       ammo: G.combat.ammo, weapon: G.combat.weapon,
       x: G.player.x, z: G.player.z,
+      dayTime: G.dayTime, weather: G.weather,
       settings: G.settings,
     };
     window.localStorage.setItem(SAVE_KEY, JSON.stringify(data));
@@ -39,6 +42,8 @@ export function loadGame(G) {
     G.combat.weapon = d.weapon ?? 'pistol';
     if (d.shirt) setShirtColor(G.player, d.shirt);
     if (d.x !== undefined) { G.player.x = d.x; G.player.z = d.z; }
+    if (d.dayTime !== undefined) G.dayTime = d.dayTime;
+    if (d.weather) { G.weather = d.weather; G.rain.visible = d.weather === 'rain'; }
     if (d.settings) Object.assign(G.settings, d.settings);
     return true;
   } catch {

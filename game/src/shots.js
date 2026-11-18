@@ -1,8 +1,11 @@
-// The screenshot scenes behind ?shot=start|play|chase|night. Each one stages a
-// real moment of the game — the same world, the same rules, driven forward a few
-// seconds by a scripted driver — so the frame is what playing really looks like
-// and the same seed always gives the same frame. The briefing panel is hidden
-// for the shot so the city, the car and the HUD fill the frame.
+// The screenshot scenes behind ?shot=start|play|chase|night, rewritten for the
+// v4 recorded pass. Each one stages a real moment of the game — the same world,
+// the same rules, driven forward a few seconds by a scripted driver — so the
+// frame is what playing really looks like and the same seed always gives the
+// same frame. The briefing panel is hidden for the shot so the city, the car
+// and the HUD fill the frame. New in v4: the start shot gets a slight camera
+// angle so the dawn sun disc sits beside the hero, and the chase shot flashes
+// the wanted stars for the frame.
 import { STEP } from './config.js';
 import { enterVehicle } from './vehicles.js';
 
@@ -43,13 +46,14 @@ export function stageShot(name, G) {
   G.money = 12500;
   G.rep = 85;
   if (name === 'start') {
-    // Dawn over Downtown: the hero on foot, the city waking up behind the title.
+    // Dawn over Downtown: the hero on foot, the city waking up behind the title,
+    // the sunset sun disc glowing low on the horizon beside him.
     G.dayTime = 0.05;
     G.weather = 'clear';
     G.player.x = 0;
     G.player.z = 140;
     G.player.yaw = Math.PI;
-    G.camOrbit = 0;
+    G.camOrbit = 0.15;
     G.wanted = 0;
     G.missionText = 'Mission 1: Welcome to Vice Bay — go to Rico\'s apartment';
     walkFor(G, 1.2);
@@ -64,6 +68,7 @@ export function stageShot(name, G) {
     G.weather = 'clear';
     takeCar(G, 0, -100, 0);
     G.wanted = 3;
+    G.crimeFlash = 2;
     G.missionText = 'Mission 4: The Getaway — escape the police pursuit!';
     G.missionTarget = { x: 0, z: -400 };
     driveFor(G, 4, 0);
@@ -87,6 +92,7 @@ export function stageShot(name, G) {
     }
     for (let i = 0; i < 0.4 / STEP; i += 1) G.update(STEP);
     G.currentVehicle.health = 88;
+    G.crimeFlash = 2;
     hideBriefing();
     return 'play';
   }

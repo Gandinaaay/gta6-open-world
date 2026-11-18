@@ -1,7 +1,8 @@
 // Procedural canvas textures: every surface in Vice Bay is painted from code at
 // boot, so the game ships zero image files and makes zero network requests.
 // A texture is just a small canvas plus a repeat; windows, road paint, sand and
-// water are all drawn with the 2D context before the first frame.
+// water are all drawn with the 2D context before the first frame. Rewritten for
+// the v4 recorded pass, with a sunset-gradient sky texture for the dawn disc.
 function canvasTexture(w, h, draw, repeatX = 1, repeatY = 1) {
   const c = document.createElement('canvas');
   c.width = w;
@@ -181,5 +182,19 @@ export function neonTexture(text, glow) {
     ctx.shadowBlur = 0;
     ctx.fillStyle = '#ffffff';
     ctx.fillText(text, w / 2, h / 2);
+  });
+}
+
+// Sunset disc: a soft radial glow, deep orange at the centre fading to
+// transparent, painted once and reused by the sun disc in world.js.
+export function sunsetTexture() {
+  return canvasTexture(128, 128, (ctx, w, h) => {
+    const g = ctx.createRadialGradient(w / 2, h / 2, 4, w / 2, h / 2, w / 2);
+    g.addColorStop(0, 'rgba(255, 214, 140, 1)');
+    g.addColorStop(0.35, 'rgba(255, 150, 70, 0.9)');
+    g.addColorStop(0.7, 'rgba(255, 90, 60, 0.35)');
+    g.addColorStop(1, 'rgba(255, 90, 60, 0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, w, h);
   });
 }

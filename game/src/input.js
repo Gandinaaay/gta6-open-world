@@ -1,8 +1,9 @@
-// Keyboard and mouse input for Vice Bay. Keys held down are read every frame;
-// one-shot presses (interact, enter vehicle, punch, pause, horn, confirm) are
-// queued as bit flags and taken exactly once by the main loop, so a press that
-// lands between two frames is never lost and never counted twice.
-// Arrow keys mirror WASD, and dragging the mouse orbits the third-person camera.
+// Keyboard and mouse input for Vice Bay, rewritten for the v4 recorded pass.
+// Keys held down are read every frame; one-shot presses (interact, enter
+// vehicle, punch, pause, horn, confirm) are queued as bit flags and taken
+// exactly once by the main loop, so a press that lands between two frames is
+// never lost and never counted twice. Arrow keys mirror WASD, and dragging the
+// mouse orbits the third-person camera.
 import { KEYS } from './config.js';
 
 export const ACTION_INTERACT = 1;
@@ -85,6 +86,7 @@ export function createInput(G) {
     G.camOrbit += event.deltaY * 0.0005;
     event.preventDefault();
   }, { passive: false });
+  canvas.addEventListener('contextmenu', (event) => event.preventDefault());
 
   return {
     takeActions() {

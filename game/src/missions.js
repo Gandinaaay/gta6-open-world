@@ -1,9 +1,12 @@
-// The story: 10 linked main missions in "Blood & Destiny", each a list of steps
-// the engine plays (go to, drive to, deliver, kill, escape, race, collect, talk,
-// choice), plus 8 working side missions you start at markers around the city.
-// Step types: goto | drive | deliver | kill | collect | escape | race | talk | choice.
-// Every step carries its own marker, radius and reward; the engine advances them,
-// and the HUD shows the current step text plus a live distance to the marker.
+// The story, rewritten for the v4 recorded pass: 10 linked main missions in
+// "Blood & Destiny", each a list of steps the engine plays (go to, drive to,
+// deliver, kill, escape, race, collect, talk, choice), plus 8 working side
+// missions you start at markers around the city. Step types:
+// goto | drive | deliver | kill | collect | escape | race | talk | choice.
+// Every step carries its own marker, radius and reward; the engine advances
+// them, and the HUD shows the current step text plus a live distance to the
+// marker. New in v4: finishing a story mission also tops up 20 pistol rounds,
+// so the next fight never starts dry.
 import { PLACES } from './city.js';
 import { spawnEnemy, clearEnemies } from './combat.js';
 import { spawnVehicle } from './vehicles.js';
@@ -206,7 +209,8 @@ export function createMissionEngine(G) {
       const m = engine.current();
       G.money += m.reward;
       G.rep += m.rep;
-      G.toast('Mission complete: ' + m.title + ' +$' + m.reward + ' +' + m.rep + ' rep');
+      G.combat.ammo.pistol += 20;
+      G.toast('Mission complete: ' + m.title + ' +$' + m.reward + ' +' + m.rep + ' rep · +20 pistol ammo');
       if (G.audio) G.audio.missionDone();
       engine.active = false;
       engine.missionIndex += 1;

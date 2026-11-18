@@ -1,8 +1,10 @@
-// Vehicles: box-built cars, SUVs, bikes, taxis, trucks and police interceptors,
-// with arcade driving (acceleration, braking, steering that tightens with speed,
-// a Space handbrake for sliding turns, damage) and entering, exiting and
-// stealing them off the street.
-import { VEHICLE_TYPES, KEYS } from './config.js';
+// Vehicles, rewritten for the v4 recorded pass: box-built cars, SUVs, bikes,
+// taxis, trucks and police interceptors, with arcade driving (acceleration,
+// braking, steering that tightens with speed, a Space handbrake for sliding
+// turns, damage) and entering, exiting and stealing them off the street.
+// New in v4: headlights that glow at night and brake lights that flare when
+// you brake, so night driving reads at a glance.
+import { VEHICLE_TYPES, KEYS, HANDBRAKE_GRIP } from './config.js';
 import { collideCircle, clampToWorld } from './city.js';
 
 let vehicleId = 0;
@@ -36,6 +38,10 @@ export function makeVehicleMesh(typeKey) {
       group.add(w);
       wheels.push(w);
     }
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.1), new THREE.MeshBasicMaterial({ color: 0xfff2b0 }));
+    head.position.set(0, 0.75, -1.12);
+    group.add(head);
+    group.userData.headlight = head;
     return { group, wheels, type };
   }
 
@@ -62,6 +68,20 @@ export function makeVehicleMesh(typeKey) {
     sign.position.set(0, 1.8, -0.2);
     group.add(sign);
   }
+  // Headlights up front, brake lights at the back — both are plain bright
+  // boxes, so they read in daylight and glow at night.
+  const headMat = new THREE.MeshBasicMaterial({ color: 0xfff2b0 });
+  const headL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.18, 0.1), headMat);
+  headL.position.set(-wide / 2 + 0.3, 0.8, -long / 2 - 0.02);
+  const headR = headL.clone();
+  headR.position.x = wide / 2 - 0.3;
+  group.add(headL, headR);
+  group.userData.headlight = headL;
+  const brakeMat = new THREE.MeshBasicMaterial({ color: 0x881111 });
+  const brake = new THREE.Mesh(new THREE.BoxGeometry(wide * 0.8, 0.18, 0.1), brakeMat);
+  brake.position.set(0, 0.85, long / 2 + 0.02);
+  group.add(brake);
+  group.userData.brakeLight = brake;
   const wheels = [];
   for (const [x, z] of [[-wide / 2, long / 2 - 0.8], [wide / 2, long / 2 - 0.8], [-wide / 2, -long / 2 + 0.8], [wide / 2, -long / 2 + 0.8]]) {
     const w = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 12), wheelMat);
@@ -112,7 +132,7 @@ export function driveVehicle(G, v, dt) {
   v.speed = Math.max(-14, Math.min(top, v.speed));
   const steer = (keys[KEYS.left] ? 1 : 0) - (keys[KEYS.right] ? 1 : 0);
   const dir = v.speed >= 0 ? 1 : -1;
-  const steerPower = v.type.turn * grip * (handbrake ? 1.7 : 1) * Math.min(1, Math.abs(v.speed) / 14);
+  const steerPower = v.type.turn * grip * (handbrake ? HANDBRAKE_GRIP : 1) * Math.min(1, Math.abs(v.speed) / 14);
   v.yaw += steer * steerPower * dir * dt;
   if (handbrake && steer !== 0 && Math.abs(v.speed) > 12 && G.audio) G.audio.skid();
   const nx = v.x - Math.sin(v.yaw) * v.speed * dt;
@@ -139,6 +159,11 @@ export function driveVehicle(G, v, dt) {
   if (v.isPolice && v.group.userData.lightBar) {
     v.lightPhase += dt * 6;
     v.group.userData.lightBar.material.color.setHex(Math.sin(v.lightPhase) > 0 ? 0xff0000 : 0x0000ff);
+  }
+  // Brake lights flare while you brake; headlights stay on, brighter at night.
+  if (v.group.userData.brakeLight) {
+    const braking = !!keys[KEYS.back] || handbrake;
+    v.group.userData.brakeLight.material.color.setHex(braking ? 0xff2222 : 0x881111);
   }
   return v.speed;
 }

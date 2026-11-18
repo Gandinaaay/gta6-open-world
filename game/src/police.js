@@ -1,17 +1,19 @@
-// The Vice Bay Police Department: a 1–5 star wanted level, patrol cars that
-// become pursuit cars, arrests when they catch you on foot, and a search-and-lose
-// system that lets you break line of sight and cool off. More stars means more
-// cars, faster cars, and a shorter fuse before they give up.
+// The Vice Bay Police Department, rewritten for the v4 recorded pass: a 1–5
+// star wanted level, patrol cars that become pursuit cars, arrests when they
+// catch you on foot, and a search-and-lose system that lets you break line of
+// sight and cool off. More stars means more cars, faster cars, and a shorter
+// fuse before they give up. New in v4: pursuit cars flash their light bars
+// even though they never call driveVehicle — the chase reads from far away.
 import { spawnVehicle } from './vehicles.js';
 import { randomRange } from './random.js';
-import { WANTED_COOLOFF_BASE } from './config.js';
+import { WANTED_COOLOFF_BASE, WANTED_FLASH_TIME } from './config.js';
 
 export function addWanted(G, stars) {
   const before = G.wanted;
   G.wanted = Math.max(0, Math.min(5, G.wanted + stars));
   if (G.wanted > before) {
     G.wantedTimer = 0;
-    G.crimeFlash = 2;
+    G.crimeFlash = WANTED_FLASH_TIME;
     if (G.hudFlash) G.hudFlash('WANTED LEVEL ' + G.wanted);
   }
 }
@@ -84,6 +86,12 @@ export function updatePolice(G, dt, random) {
     cop.group.position.set(cop.x, 0, cop.z);
     cop.group.rotation.y = cop.yaw;
     for (const w of cop.wheels) w.rotation.x += cop.speed * dt * 2.4;
+    // Flash the light bar: pursuit cars never run driveVehicle, so this is the
+    // only place their bar animates.
+    if (cop.group.userData.lightBar) {
+      cop.lightPhase += dt * 6;
+      cop.group.userData.lightBar.material.color.setHex(Math.sin(cop.lightPhase) > 0 ? 0xff0000 : 0x0000ff);
+    }
     // Ram the player's car: damage and a shove.
     if (G.currentVehicle && dist < 4.5) {
       G.currentVehicle.health = Math.max(0, G.currentVehicle.health - 5 * dt);

@@ -1,8 +1,10 @@
-// Vice Bay itself: the ground, the road grid, eight districts with their own
-// buildings, the beach and the sea, the airport runway, the port container yard,
-// trees, lamps, traffic lights, shop fronts and the named places the missions
-// send you to. Everything the player can walk or drive into is a box collider
-// returned by buildCity; the rest is scenery.
+// Vice Bay itself, rewritten for the v4 recorded pass: the ground, the road
+// grid, eight districts with their own buildings, the beach and the sea, the
+// airport runway, the port container yard, trees, lamps, traffic lights, shop
+// fronts and the named places the missions send you to. Everything the player
+// can walk or drive into is a box collider returned by buildCity; the rest is
+// scenery. New in v4: a second neon sign for the club and pier lamps, so the
+// beach reads at night from both ends.
 import { WORLD, DISTRICTS, districtAt } from './config.js';
 import {
   buildingTexture, houseTexture, roadTexture, sidewalkTexture, grassTexture,
@@ -225,8 +227,8 @@ export function buildCity(scene, random) {
     colliders.push({ x0: x - 6, z0: z - 1.5, x1: x + 6, z1: z + 1.5 });
   }
 
-  // Billboards over Downtown and the beach strip, plus a glowing neon sign
-  // for the Neon Tide Club so the beach reads at night.
+  // Billboards over Downtown and the beach strip, plus glowing neon signs for
+  // the Neon Tide Club so the beach reads at night from both directions.
   const bb1 = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), new THREE.MeshBasicMaterial({ map: billboardTexture('VICE BAY', '#d21f3c', '#ffffff') }));
   bb1.position.set(0, 26, -195);
   group.add(bb1);
@@ -238,6 +240,10 @@ export function buildCity(scene, random) {
   neon.position.set(420, 12, 112);
   neon.rotation.y = -Math.PI / 2;
   group.add(neon);
+  const neon2 = new THREE.Mesh(new THREE.PlaneGeometry(18, 7), new THREE.MeshBasicMaterial({ map: neonTexture('VICE BAY', '#ff5c8a') }));
+  neon2.position.set(420, 11, -20);
+  neon2.rotation.y = -Math.PI / 2;
+  group.add(neon2);
   const bb3 = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), new THREE.MeshBasicMaterial({ map: billboardTexture('HAVANA MARKET', '#c96f4a', '#ffffff') }));
   bb3.position.set(-320, 14, 220);
   group.add(bb3);
@@ -270,9 +276,12 @@ export function buildCity(scene, random) {
     shop.sign = sign;
   }
 
-  // A wooden pier jutting into the sea at Ocean Beach.
+  // A wooden pier jutting into the sea at Ocean Beach, lamps along its spine.
   const pier = box(10, 1, 80, new THREE.MeshLambertMaterial({ color: 0x8a6b45 }), 520, 1, 60);
   group.add(pier);
+  addLamp(516, 30);
+  addLamp(524, 60);
+  addLamp(516, 90);
 
   return { colliders, trafficLights, lamps, group };
 }

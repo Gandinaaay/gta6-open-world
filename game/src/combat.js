@@ -1,7 +1,9 @@
-// Combat: fists and four guns, ammo, health and damage, enemy gangsters with
-// simple chase-and-shoot AI, muzzle flashes, tracers and hit sparks — all
-// raycast, no physics library needed. Ray hits resolve through userData.owner,
-// which every damageable figure and vehicle sets on its group.
+// Combat, rewritten for the v4 recorded pass: fists and four guns, ammo, health
+// and damage, enemy gangsters with simple chase-and-shoot AI, muzzle flashes,
+// tracers and hit sparks — all raycast, no physics library needed. Ray hits
+// resolve through userData.owner, which every damageable figure and vehicle sets
+// on its group. New in v4: hits knock the enemy back a step, so a shot feels
+// like it landed instead of just ticking a number down.
 import { WEAPONS } from './config.js';
 
 const raycaster = new THREE.Raycaster();
@@ -114,6 +116,14 @@ export function createCombat(G) {
     },
     damageEnemy(e, amount) {
       e.health -= amount;
+      // Knockback: the hit shoves the gangster a step away from the player.
+      const px = G.currentVehicle ? G.currentVehicle.x : G.player.x;
+      const pz = G.currentVehicle ? G.currentVehicle.z : G.player.z;
+      const dx = e.x - px;
+      const dz = e.z - pz;
+      const len = Math.hypot(dx, dz) || 1;
+      e.x += (dx / len) * 0.6;
+      e.z += (dz / len) * 0.6;
       combat.spark(new THREE.Vector3(e.x, 1.5, e.z));
       if (e.health <= 0 && e.alive) {
         e.alive = false;

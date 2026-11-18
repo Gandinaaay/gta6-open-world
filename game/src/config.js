@@ -1,7 +1,7 @@
-// Vice Bay: Blood & Destiny — every shared number in one place.
-// The world is 1000 x 1000 units; 1 unit is about 2 metres, so the playable city
-// is roughly 2 km x 2 km. Tune driving, combat and the day cycle here and the
-// whole game follows, because no other file hard-codes these values.
+// Vice Bay: Blood & Destiny — every shared number in one place, rewritten for
+// the v4 recorded pass. The world is 1000 x 1000 units; 1 unit is about 2 metres,
+// so the playable city is roughly 2 km x 2 km. Tune driving, combat and the day
+// cycle here and the whole game follows, because no other file hard-codes them.
 export const WORLD = {
   size: 1000, // playable ground runs -500..500 on x and z
   half: 500,
@@ -31,7 +31,7 @@ export function districtAt(x, z) {
 }
 
 // topSpeed is in world units per second; the HUD multiplies by 3.6 for km/h,
-// so a 62 top speed reads as ~223 km/h on the speedometer.
+// so a 66 top speed reads as ~238 km/h on the speedometer.
 export const VEHICLE_TYPES = {
   sport:   { name: 'Comet GT', kind: 'sport', price: 12000, topSpeed: 66, accel: 36, brake: 58, turn: 2.7, color: 0xd21f3c, seats: 2 },
   sedan:   { name: 'Bayview Sedan', kind: 'sedan', price: 4500, topSpeed: 43, accel: 23, brake: 46, turn: 2.2, color: 0x2e6fb0, seats: 4 },
@@ -78,3 +78,9 @@ export const SAVE_KEY = 'vicebay-save-v1';
 export const STEP = 1 / 60;
 export const DAY_LENGTH = 480; // seconds for one full day/night cycle
 export const WANTED_COOLOFF_BASE = 14; // seconds unseen before one star drops
+
+// v4 tuning: how hard the handbrake slides, how fast the wanted stars flash
+// when the heat rises, and the dawn/dusk window the sunset sun disc shows in.
+export const HANDBRAKE_GRIP = 1.7; // steering multiplier while the handbrake is out
+export const WANTED_FLASH_TIME = 2.0; // seconds the HUD stars flash after a new star
+export const SUNSET_WINDOW = { from: 0.02, to: 0.1 }; // dayTime range for the dawn disc

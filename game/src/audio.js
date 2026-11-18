@@ -1,7 +1,8 @@
 // Synthesised sound: every noise in Vice Bay is built with WebAudio oscillators
-// and filtered noise at runtime — no audio files, no network, nothing to download.
-// The AudioContext is created lazily on the first user gesture (unlock), because
-// browsers refuse to start audio before one.
+// and filtered noise at runtime — no audio files, no network, nothing to
+// download. The AudioContext is created lazily on the first user gesture
+// (unlock), because browsers refuse to start audio before one. Rewritten for
+// the v4 recorded pass, with a short wanted sting when the heat rises.
 export function createAudio() {
   let ctx = null;
   let master = null;
@@ -109,5 +110,7 @@ export function createAudio() {
     horn() { tone(370, 0.25, 'square', 0.18); tone(466, 0.25, 'square', 0.15); },
     click() { tone(800, 0.05, 'square', 0.12); },
     cash() { tone(1200, 0.08, 'sine', 0.25); setTimeout(() => tone(1500, 0.12, 'sine', 0.25), 70); },
+    // Short two-note sting when a new wanted star lands — the heat just went up.
+    wantedSting() { tone(392, 0.14, 'square', 0.2); setTimeout(() => tone(311, 0.22, 'square', 0.2), 130); },
   };
 }

@@ -1,11 +1,14 @@
-// Boot and the one loop: input is read every frame, the world advances in fixed
-// 1/60 s steps, and the renderer paints what is there. The game moves between
-// screens — title, play, paused, shop, missions, choice, busted and wasted —
-// all as DOM panels over the same live 3D city.
+// Boot and the one loop, rewritten for the v4 recorded pass: input is read
+// every frame, the world advances in fixed 1/60 s steps, and the renderer paints
+// what is there. The game moves between screens — title, play, paused, shop,
+// missions, choice, busted and wasted — all as DOM panels over the same live 3D
+// city.
 //
 // ?seed=N fixes the city and traffic. ?shot=start|play|chase|night (with &seed=N)
 // stages that scene instead of running the loop, paints it a few times and sets
-// window.__shotReady for a screenshot.
+// window.__shotReady for a screenshot. New in v4: the title camera drifts
+// slowly around the hero, so the menu sits over a living city instead of a
+// frozen frame.
 import { STEP } from './config.js';
 import { createRandom } from './random.js';
 import { createGame } from './world.js';
@@ -201,8 +204,12 @@ function runGame() {
       if (saveTimer > 20) { saveTimer = 0; G.saveGame(); }
     } else {
       accumulator = 0;
-      // The title screen still shows the living city behind the menu.
-      if (G.screen === 'title') G.update(STEP * 0.25);
+      // The title screen still shows the living city behind the menu, and the
+      // camera drifts slowly so it never looks like a still image.
+      if (G.screen === 'title') {
+        G.camOrbit += 0.0006;
+        G.update(STEP * 0.25);
+      }
     }
     G.renderer.render(G.scene, G.camera);
   }
