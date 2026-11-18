@@ -1,6 +1,7 @@
-// Combat: fists and four guns, ammo, health and damage, enemy gangsters with simple
-// chase-and-shoot AI, muzzle flashes, tracers and hit sparks — all raycast, no physics
-// library needed.
+// Combat: fists and four guns, ammo, health and damage, enemy gangsters with
+// simple chase-and-shoot AI, muzzle flashes, tracers and hit sparks — all
+// raycast, no physics library needed. Ray hits resolve through userData.owner,
+// which every damageable figure and vehicle sets on its group.
 import { WEAPONS } from './config.js';
 
 const raycaster = new THREE.Raycaster();
@@ -36,8 +37,9 @@ export function createCombat(G) {
         combat.melee(origin, dir);
         return true;
       }
-      // One ray per shot (shotgun fires three spread rays for its punch).
-      const rays = combat.weapon === 'shotgun' ? [-0.06, 0, 0.06] : [0];
+      // One ray per shot (the shotgun fires three spread rays for its punch,
+      // the SMG adds a little random spread so it feels less like a laser).
+      const rays = combat.weapon === 'shotgun' ? [-0.06, 0, 0.06] : [combat.weapon === 'smg' ? (Math.random() - 0.5) * 0.05 : 0];
       for (const spread of rays) {
         const d = dir.clone();
         d.x += Math.cos(p.yaw) * spread;
@@ -118,8 +120,14 @@ export function createCombat(G) {
         e.group.visible = false;
         G.money += e.bounty || 100;
         G.rep += 5;
+        // A downed gangster sometimes drops a little pistol ammo.
+        if (Math.random() < 0.4) {
+          combat.ammo.pistol += 12;
+          G.toast('Gangster down! +$' + (e.bounty || 100) + ' · +12 pistol ammo');
+        } else {
+          G.toast('Gangster down! +$' + (e.bounty || 100));
+        }
         if (G.audio) G.audio.cash();
-        G.toast('Gangster down! +$' + (e.bounty || 100));
         if (G.onEnemyKilled) G.onEnemyKilled(e);
       }
     },
@@ -169,7 +177,8 @@ export function createCombat(G) {
   return combat;
 }
 
-// Enemy gangsters: spawn them at a place, they chase the player and shoot when close.
+// Enemy gangsters: spawned at a place, they chase the player and shoot when close.
+// A green-shirted "civilian" is the same figure with no bounty — used by the rescue.
 export function spawnEnemy(G, x, z, opts = {}) {
   const group = new THREE.Group();
   const shirt = new THREE.MeshLambertMaterial({ color: opts.color || 0x8b0000 });
@@ -191,6 +200,7 @@ export function spawnEnemy(G, x, z, opts = {}) {
     health: opts.health || 100, alive: true,
     bounty: opts.bounty || 150, shootTimer: 1 + Math.random(),
     speed: opts.speed || 4.5, legL, legR, phase: Math.random() * 10,
+    passive: !!opts.passive,
   };
   group.userData.owner = enemy;
   G.enemies.push(enemy);
@@ -201,7 +211,7 @@ export function updateEnemies(G, dt) {
   const px = G.currentVehicle ? G.currentVehicle.x : G.player.x;
   const pz = G.currentVehicle ? G.currentVehicle.z : G.player.z;
   for (const e of G.enemies) {
-    if (!e.alive) continue;
+    if (!e.alive || e.passive) continue;
     const dx = px - e.x;
     const dz = pz - e.z;
     const dist = Math.hypot(dx, dz) || 1;

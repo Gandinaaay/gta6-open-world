@@ -1,13 +1,17 @@
-// Vice Bay: Blood & Destiny — world constants, districts, vehicles, controls.
-// Every number the rest of the game shares lives here so tuning is one place.
+// Vice Bay: Blood & Destiny — every shared number in one place.
+// The world is 1000 x 1000 units; 1 unit is about 2 metres, so the playable city
+// is roughly 2 km x 2 km. Tune driving, combat and the day cycle here and the
+// whole game follows, because no other file hard-codes these values.
 export const WORLD = {
-  size: 1000, // playable ground is -500..500 on x and z; 1 unit ~ 2 m, so ~2 km x 2 km
+  size: 1000, // playable ground runs -500..500 on x and z
   half: 500,
   roadSpacing: 100,
   roadWidth: 16,
   sidewalkWidth: 4,
 };
 
+// Eight districts, checked top to bottom by districtAt(): the first box that
+// contains the point wins, so the Highway Ring (last, whole-map) is the fallback.
 export const DISTRICTS = [
   { id: 'downtown', name: 'Downtown', x0: -200, z0: -200, x1: 200, z1: 200, style: 'tower', density: 1.0 },
   { id: 'beach', name: 'Ocean Beach', x0: 350, z0: -500, x1: 500, z1: 500, style: 'beach', density: 0.55 },
@@ -23,17 +27,19 @@ export function districtAt(x, z) {
   for (const d of DISTRICTS) {
     if (x >= d.x0 && x < d.x1 && z >= d.z0 && z < d.z1) return d;
   }
-  return DISTRICTS[0];
+  return DISTRICTS[DISTRICTS.length - 1];
 }
 
+// topSpeed is in world units per second; the HUD multiplies by 3.6 for km/h,
+// so a 62 top speed reads as ~223 km/h on the speedometer.
 export const VEHICLE_TYPES = {
-  sport:   { name: 'Comet GT', kind: 'sport', price: 12000, topSpeed: 62, accel: 34, brake: 55, turn: 2.6, color: 0xd21f3c, seats: 2 },
-  sedan:   { name: 'Bayview Sedan', kind: 'sedan', price: 4500, topSpeed: 42, accel: 22, brake: 45, turn: 2.2, color: 0x2e6fb0, seats: 4 },
-  suv:     { name: 'Trailblazer SUV', kind: 'suv', price: 8000, topSpeed: 46, accel: 24, brake: 48, turn: 2.0, color: 0x3a3f44, seats: 5 },
-  bike:    { name: 'Nightrider Bike', kind: 'bike', price: 6000, topSpeed: 58, accel: 40, brake: 60, turn: 3.4, color: 0x111111, seats: 2 },
-  taxi:    { name: 'Bay Taxi', kind: 'taxi', price: 0, topSpeed: 40, accel: 20, brake: 45, turn: 2.2, color: 0xf2b705, seats: 4 },
-  police:  { name: 'VBPD Interceptor', kind: 'police', price: 0, topSpeed: 56, accel: 32, brake: 55, turn: 2.5, color: 0x0d1b2a, seats: 4 },
-  truck:   { name: 'Port Hauler', kind: 'truck', price: 9000, topSpeed: 34, accel: 16, brake: 38, turn: 1.7, color: 0x7a4a21, seats: 2 },
+  sport:   { name: 'Comet GT', kind: 'sport', price: 12000, topSpeed: 66, accel: 36, brake: 58, turn: 2.7, color: 0xd21f3c, seats: 2 },
+  sedan:   { name: 'Bayview Sedan', kind: 'sedan', price: 4500, topSpeed: 43, accel: 23, brake: 46, turn: 2.2, color: 0x2e6fb0, seats: 4 },
+  suv:     { name: 'Trailblazer SUV', kind: 'suv', price: 8000, topSpeed: 47, accel: 25, brake: 48, turn: 2.0, color: 0x3a3f44, seats: 5 },
+  bike:    { name: 'Nightrider Bike', kind: 'bike', price: 6000, topSpeed: 60, accel: 42, brake: 62, turn: 3.5, color: 0x111111, seats: 2 },
+  taxi:    { name: 'Bay Taxi', kind: 'taxi', price: 0, topSpeed: 41, accel: 21, brake: 46, turn: 2.2, color: 0xf2b705, seats: 4 },
+  police:  { name: 'VBPD Interceptor', kind: 'police', price: 0, topSpeed: 58, accel: 34, brake: 56, turn: 2.6, color: 0x0d1b2a, seats: 4 },
+  truck:   { name: 'Port Hauler', kind: 'truck', price: 9000, topSpeed: 35, accel: 17, brake: 38, turn: 1.7, color: 0x7a4a21, seats: 2 },
 };
 
 export const WEAPONS = {
@@ -58,7 +64,8 @@ export const UPGRADES = [
   { id: 'tires1', name: 'Grip Tyres (+handling)', price: 2000, apply: 'grip' },
 ];
 
-// Key bindings. Mouse: left click shoots / punches, wheel or drag orbits the camera.
+// Controls. Mouse: drag orbits the camera, wheel zooms, left click shoots or
+// punches. Space is jump on foot and the handbrake while driving.
 export const KEYS = {
   forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD',
   jump: 'Space', sprint: 'ShiftLeft', crouch: 'KeyC', interact: 'KeyE',
@@ -69,4 +76,5 @@ export const KEYS = {
 
 export const SAVE_KEY = 'vicebay-save-v1';
 export const STEP = 1 / 60;
-export const DAY_LENGTH = 480; // seconds for a full day/night cycle
+export const DAY_LENGTH = 480; // seconds for one full day/night cycle
+export const WANTED_COOLOFF_BASE = 14; // seconds unseen before one star drops

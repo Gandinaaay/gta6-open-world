@@ -1,6 +1,8 @@
 // The HUD: health bar, money, reputation, wanted stars, speed, compass, mission
-// objective, toasts, briefing panel, shop and pause panels — all DOM over the 3D
-// canvas — plus the live minimap drawn on a 2D canvas every frame.
+// objective with a live distance to the marker, toasts, briefing panel, shop and
+// pause panels — all DOM over the 3D canvas — plus the live minimap drawn on a
+// 2D canvas every frame. DOM text is only rewritten when its value actually
+// changes, so the HUD costs almost nothing per frame.
 import { DISTRICTS } from './config.js';
 
 export function createHud(G) {
@@ -17,7 +19,7 @@ export function createHud(G) {
     // District blocks.
     for (const d of DISTRICTS) {
       if (d.id === 'highway') continue;
-      mctx.fillStyle = d.id === 'beach' ? '#c9ae72' : d.id === 'port' ? '#6b5d4f' : '#2c3a2e';
+      mctx.fillStyle = d.id === 'beach' ? '#c9ae72' : d.id === 'port' ? '#6b5d4f' : d.id === 'airport' ? '#3a3f44' : '#2c3a2e';
       mctx.fillRect((d.x0 + 500) * scale, (d.z0 + 500) * scale, (d.x1 - d.x0) * scale, (d.z1 - d.z0) * scale);
     }
     // Roads.
@@ -27,7 +29,7 @@ export function createHud(G) {
       mctx.beginPath(); mctx.moveTo((c + 500) * scale, 0); mctx.lineTo((c + 500) * scale, S); mctx.stroke();
       mctx.beginPath(); mctx.moveTo(0, (c + 500) * scale); mctx.lineTo(S, (c + 500) * scale); mctx.stroke();
     }
-    // Sea.
+    // Sea on the east edge.
     mctx.fillStyle = '#1e6f8e';
     mctx.fillRect((500 + 500) * scale - 10, 0, 20, S);
     const dot = (x, z, color, r = 4) => {
@@ -36,7 +38,16 @@ export function createHud(G) {
       mctx.arc((x + 500) * scale, (z + 500) * scale, r, 0, Math.PI * 2);
       mctx.fill();
     };
-    if (G.missionTarget) dot(G.missionTarget.x, G.missionTarget.z, '#ffd23f', 5);
+    // Mission marker pulses: a yellow ring around the gold dot.
+    if (G.missionTarget) {
+      const pulse = 5 + Math.sin(G.time * 6) * 2.5;
+      mctx.strokeStyle = '#ffd23f';
+      mctx.lineWidth = 2;
+      mctx.beginPath();
+      mctx.arc((G.missionTarget.x + 500) * scale, (G.missionTarget.z + 500) * scale, pulse, 0, Math.PI * 2);
+      mctx.stroke();
+      dot(G.missionTarget.x, G.missionTarget.z, '#ffd23f', 5);
+    }
     if (G.sideTarget) dot(G.sideTarget.x, G.sideTarget.z, '#2ec4b6', 5);
     for (const cop of G.police) dot(cop.x, cop.z, '#3a86ff', 3);
     for (const e of G.enemies) if (e.alive) dot(e.x, e.z, '#ff3b30', 3);
@@ -55,6 +66,10 @@ export function createHud(G) {
     mctx.closePath();
     mctx.fill();
     mctx.restore();
+    // North marker.
+    mctx.fillStyle = '#ffffff';
+    mctx.font = 'bold 11px system-ui, sans-serif';
+    mctx.fillText('N', 4, 13);
   }
 
   let lastHtml = '';
@@ -63,22 +78,33 @@ export function createHud(G) {
     const stars = '★'.repeat(G.wanted) + '☆'.repeat(5 - G.wanted);
     const compass = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round((((-G.playerYaw()) % (Math.PI * 2)) + Math.PI * 2) / (Math.PI / 4)) % 8];
     const district = G.currentDistrict ? G.currentDistrict.name : 'Vice Bay';
+    // Live distance to the objective, in metres (1 unit ~ 2 m).
+    let objective = G.missionText;
+    const target = G.missionTarget || G.sideTarget;
+    if (target) {
+      const px = G.currentVehicle ? G.currentVehicle.x : G.player.x;
+      const pz = G.currentVehicle ? G.currentVehicle.z : G.player.z;
+      objective += ' · ' + Math.round(Math.hypot(target.x - px, target.z - pz) * 2) + 'm';
+    }
     const html = [
       G.player.health, Math.floor(G.money), G.rep, stars, Math.round(speed),
-      compass, district, G.missionText, G.currentVehicle ? G.currentVehicle.type.name : 'On foot',
+      compass, district, objective, G.currentVehicle ? G.currentVehicle.type.name : 'On foot',
       G.combat ? G.combat.weapon : '', G.combat ? (G.combat.ammo[G.combat.weapon] ?? '∞') : '',
+      G.interactPrompt || '',
     ].join('|');
     if (html !== lastHtml) {
       lastHtml = html;
       document.getElementById('health-fill').style.width = Math.max(0, G.player.health) + '%';
+      document.getElementById('health-fill').style.background = G.player.health < 30 ? '#e74c3c' : 'linear-gradient(90deg, #27ae60, #2ecc71)';
       document.getElementById('health-num').textContent = Math.ceil(Math.max(0, G.player.health));
       document.getElementById('money').textContent = '$' + Math.floor(G.money).toLocaleString('en-US');
       document.getElementById('rep').textContent = 'REP ' + G.rep;
-      document.getElementById('stars').textContent = stars;
-      document.getElementById('stars').style.color = G.wanted > 0 ? '#ffd23f' : '#888';
+      const starsEl = document.getElementById('stars');
+      starsEl.textContent = stars;
+      starsEl.style.color = G.wanted > 0 ? '#ffd23f' : '#888';
       document.getElementById('speed').textContent = Math.round(speed) + ' km/h';
       document.getElementById('compass').textContent = compass + ' · ' + district;
-      document.getElementById('objective').textContent = G.missionText;
+      document.getElementById('objective').textContent = objective;
       document.getElementById('vehicle-name').textContent = G.currentVehicle ? G.currentVehicle.type.name + (G.currentVehicle.health < 100 ? ' — ' + Math.max(0, Math.ceil(G.currentVehicle.health)) + '%' : '') : 'On foot';
       document.getElementById('weapon').textContent = G.combat ? (G.combat.weapon.toUpperCase() + ' · ' + (G.combat.ammo[G.combat.weapon] ?? '∞')) : '';
       document.getElementById('interact').textContent = G.interactPrompt || '';

@@ -12,8 +12,8 @@
   /* ---------- HUD ---------- */
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
   #top-left { position: absolute; top: 14px; left: 14px; }
-  #health-bar { width: 220px; height: 16px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.35); border-radius: 3px; overflow: hidden; }
-  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #27ae60, #2ecc71); }
+  #health-bar { width: 220px; height: 16px; background: rgba(0,0,0,.55); border: 1px solid rgba(255,255,255,.35); border-radius: 8px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #27ae60, #2ecc71); transition: width .2s; }
   #health-num { font-size: 12px; text-shadow: 0 1px 2px #000; }
   #money { font-size: 26px; font-weight: 800; color: #7dff9a; text-shadow: 0 2px 4px #000; margin-top: 4px; }
   #rep { font-size: 13px; color: #ffd23f; text-shadow: 0 1px 2px #000; }
@@ -21,26 +21,26 @@
   #stars { font-size: 26px; letter-spacing: 2px; text-shadow: 0 2px 4px #000; }
   #time { font-size: 15px; font-weight: 700; text-shadow: 0 1px 2px #000; }
   #compass { font-size: 13px; text-shadow: 0 1px 2px #000; }
-  #minimap { position: absolute; right: 14px; top: 92px; width: 190px; height: 190px; border: 2px solid rgba(255,255,255,.5); border-radius: 4px; background: rgba(10,16,24,.85); }
-  #objective { position: absolute; left: 14px; bottom: 96px; max-width: 420px; font-size: 15px; font-weight: 600; background: rgba(0,0,0,.55); padding: 8px 12px; border-left: 4px solid #ffd23f; border-radius: 3px; }
+  #minimap { position: absolute; right: 14px; top: 92px; width: 190px; height: 190px; border: 2px solid rgba(255,255,255,.5); border-radius: 8px; background: rgba(10,16,24,.85); box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+  #objective { position: absolute; left: 14px; bottom: 96px; max-width: 460px; font-size: 15px; font-weight: 600; background: rgba(0,0,0,.55); backdrop-filter: blur(2px); padding: 8px 12px; border-left: 4px solid #ffd23f; border-radius: 4px; }
   #bottom-right { position: absolute; right: 14px; bottom: 14px; text-align: right; text-shadow: 0 1px 2px #000; }
-  #speed { font-size: 30px; font-weight: 800; }
+  #speed { font-size: 34px; font-weight: 800; line-height: 1; }
   #vehicle-name { font-size: 14px; }
   #weapon { font-size: 13px; color: #ffd23f; }
   #bottom-left { position: absolute; left: 14px; bottom: 14px; font-size: 13px; text-shadow: 0 1px 2px #000; }
   #interact { font-size: 15px; font-weight: 700; color: #ffd23f; }
   #controls { opacity: .85; }
-  #toast { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.75); padding: 10px 18px; border-radius: 4px; font-size: 16px; font-weight: 600; opacity: 0; transition: opacity .3s; z-index: 8; pointer-events: none; }
+  #toast { position: fixed; top: 84px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,.75); padding: 10px 18px; border-radius: 6px; font-size: 16px; font-weight: 600; opacity: 0; transition: opacity .3s; z-index: 8; pointer-events: none; }
   #toast.show { opacity: 1; }
-  #briefing { position: fixed; top: 140px; left: 50%; transform: translateX(-50%); width: 480px; max-width: 90vw; background: rgba(10,10,20,.88); border: 1px solid #ffd23f; border-radius: 6px; padding: 16px 20px; opacity: 0; transition: opacity .3s; z-index: 8; pointer-events: none; }
+  #briefing { position: fixed; top: 140px; left: 50%; transform: translateX(-50%); width: 480px; max-width: 90vw; background: rgba(10,10,20,.88); border: 1px solid #ffd23f; border-radius: 8px; padding: 16px 20px; opacity: 0; transition: opacity .3s; z-index: 8; pointer-events: none; }
   #briefing.show { opacity: 1; }
   #briefing-title { font-size: 20px; font-weight: 800; color: #ffd23f; margin-bottom: 6px; }
   #briefing-text { font-size: 15px; line-height: 1.45; }
   /* ---------- Panels ---------- */
   .panel { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: rgba(5,8,18,.72); z-index: 10; }
   .panel.show { display: flex; }
-  .panel-box { width: 620px; max-width: 92vw; max-height: 88vh; overflow-y: auto; background: #141a2a; border: 1px solid #2c3550; border-radius: 10px; padding: 28px 32px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
-  .panel-box h1 { margin: 0 0 4px; font-size: 42px; letter-spacing: 1px; color: #ffd23f; }
+  .panel-box { width: 620px; max-width: 92vw; max-height: 88vh; overflow-y: auto; background: #141a2a; border: 1px solid #2c3550; border-radius: 12px; padding: 28px 32px; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
+  .panel-box h1 { margin: 0 0 4px; font-size: 46px; letter-spacing: 1px; color: #ffd23f; }
   .panel-box h1 .bay { color: #2ec4b6; }
   .panel-box h2 { margin: 0 0 12px; font-size: 26px; }
   .tagline { color: #9aa5b8; margin: 0 0 20px; font-size: 15px; line-height: 1.5; }
@@ -85,7 +85,7 @@
   </div>
   <div id="bottom-left">
     <div id="interact"></div>
-    <div id="controls">WASD move · Space jump · C crouch · F enter car · E interact · Click shoot · Q punch · 1-5 weapons · M missions · Esc pause</div>
+    <div id="controls">WASD move · Space jump / handbrake · C crouch · F enter car · E interact · Click shoot · Q punch · 1-5 weapons · M missions · Esc pause</div>
   </div>
 </div>
 <div id="toast"></div>
@@ -105,7 +105,7 @@
       <label><input id="mute" type="checkbox"> Mute all sound</label>
     </div>
     <p id="save-note"></p>
-    <p class="keys">WASD move &amp; drive · Shift sprint · Space jump · C crouch · F enter / steal car · E interact &amp; shop · Left click shoot · Q punch · 1–5 switch weapon · H horn · M missions · Esc pause. Progress saves automatically.</p>
+    <p class="keys">WASD move &amp; drive · Shift sprint · Space jump / handbrake · C crouch · F enter / steal car · E interact &amp; shop · Left click shoot · Q punch · 1–5 switch weapon · H horn · M missions · Esc pause. Progress saves automatically.</p>
   </div>
 </div>
 

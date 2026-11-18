@@ -1,8 +1,10 @@
-// The Vice Bay Police Department: a 1–5 star wanted level, patrol cars that become
-// pursuit cars, arrests when they catch you on foot, and a search-and-lose system
-// that lets you break line of sight and cool off.
+// The Vice Bay Police Department: a 1–5 star wanted level, patrol cars that
+// become pursuit cars, arrests when they catch you on foot, and a search-and-lose
+// system that lets you break line of sight and cool off. More stars means more
+// cars, faster cars, and a shorter fuse before they give up.
 import { spawnVehicle } from './vehicles.js';
 import { randomRange } from './random.js';
+import { WANTED_COOLOFF_BASE } from './config.js';
 
 export function addWanted(G, stars) {
   const before = G.wanted;
@@ -15,17 +17,16 @@ export function addWanted(G, stars) {
 }
 
 export function updatePolice(G, dt, random) {
-  // Wanted decays only when no police car can see you for a while.
+  // Wanted decays only when no police car is near you for a while. The hotter
+  // you are, the longer you have to stay hidden before a star drops.
   if (G.wanted > 0) {
-    let nearest = Infinity;
-    for (const cop of G.police) nearest = Math.min(nearest, Math.hypot(cop.x - G.player.x, cop.z - G.player.z));
     const px = G.currentVehicle ? G.currentVehicle.x : G.player.x;
     const pz = G.currentVehicle ? G.currentVehicle.z : G.player.z;
     let nearestV = Infinity;
     for (const cop of G.police) nearestV = Math.min(nearestV, Math.hypot(cop.x - px, cop.z - pz));
     if (nearestV > 90) {
       G.wantedTimer += dt;
-      if (G.wantedTimer > 14 - G.wanted) {
+      if (G.wantedTimer > Math.max(6, WANTED_COOLOFF_BASE - G.wanted)) {
         G.wanted -= 1;
         G.wantedTimer = 0;
         G.toast(G.wanted === 0 ? 'You lost the police.' : 'Heat is cooling down — wanted level ' + G.wanted + '.');
@@ -55,19 +56,25 @@ export function updatePolice(G, dt, random) {
     G.scene.remove(cop.group);
   }
 
-  // Pursuit: steer toward the player, ram the car, or run the player down on foot.
+  // Pursuit: steer toward where the player will be, not where he is — the
+  // intercept point is half a second ahead — then ram the car, or run the
+  // player down on foot.
   const px = G.currentVehicle ? G.currentVehicle.x : G.player.x;
   const pz = G.currentVehicle ? G.currentVehicle.z : G.player.z;
+  const pvx = G.currentVehicle ? -Math.sin(G.currentVehicle.yaw) * G.currentVehicle.speed : 0;
+  const pvz = G.currentVehicle ? -Math.cos(G.currentVehicle.yaw) * G.currentVehicle.speed : 0;
   const playerSpeed = G.currentVehicle ? Math.abs(G.currentVehicle.speed) : G.player.speed;
   for (const cop of G.police) {
-    const dx = px - cop.x;
-    const dz = pz - cop.z;
-    const dist = Math.hypot(dx, dz) || 1;
+    const tx = px + pvx * 0.5;
+    const tz = pz + pvz * 0.5;
+    const dx = tx - cop.x;
+    const dz = tz - cop.z;
+    const dist = Math.hypot(px - cop.x, pz - cop.z) || 1;
     const wantYaw = Math.atan2(-dx, -dz);
     let dy = wantYaw - cop.yaw;
     while (dy > Math.PI) dy -= Math.PI * 2;
     while (dy < -Math.PI) dy += Math.PI * 2;
-    cop.yaw += Math.max(-2.4 * dt, Math.min(2.4 * dt, dy));
+    cop.yaw += Math.max(-2.6 * dt, Math.min(2.6 * dt, dy));
     const targetSpeed = Math.min(cop.topSpeed, dist * 0.8 + 18);
     cop.speed += (targetSpeed - cop.speed) * Math.min(1, dt * 1.2);
     cop.x -= Math.sin(cop.yaw) * cop.speed * dt;
@@ -102,7 +109,7 @@ export function updatePolice(G, dt, random) {
     }
   }
 
-  // Siren follows the chase.
+  // The siren follows the chase.
   if (G.audio) G.audio.siren(G.police.length > 0, G.wanted);
 }
 

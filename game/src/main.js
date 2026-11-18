@@ -1,7 +1,7 @@
 // Boot and the one loop: input is read every frame, the world advances in fixed
 // 1/60 s steps, and the renderer paints what is there. The game moves between
-// screens — title, play, paused, shop, missions, choice, busted and wasted — all
-// as DOM panels over the same live 3D city.
+// screens — title, play, paused, shop, missions, choice, busted and wasted —
+// all as DOM panels over the same live 3D city.
 //
 // ?seed=N fixes the city and traffic. ?shot=start|play|chase|night (with &seed=N)
 // stages that scene instead of running the loop, paints it a few times and sets

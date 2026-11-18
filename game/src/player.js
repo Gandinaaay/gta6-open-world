@@ -1,6 +1,6 @@
-// The hero on foot: a low-poly articulated figure (head, torso, arms, legs) whose
-// limbs swing with the stride, plus walk / run / sprint / jump / crouch and the
-// smooth third-person camera that follows him everywhere.
+// The hero on foot: a low-poly articulated figure (head, torso, arms, legs)
+// whose limbs swing with the stride, plus walk / run / sprint / jump / crouch
+// and the smooth third-person camera that follows him — and the car — everywhere.
 import { WORLD, KEYS } from './config.js';
 import { collideCircle, clampToWorld } from './city.js';
 
@@ -49,14 +49,15 @@ export function setShirtColor(player, color) {
   player.armR.material = new THREE.MeshLambertMaterial({ color });
 }
 
-// One step of on-foot movement. Returns the horizontal speed (for the engine/hud).
+// One step of on-foot movement. Returns the horizontal speed (for HUD/audio).
 export function updatePlayer(G, dt) {
   const p = G.player;
   const keys = G.keys;
   const sprint = keys[KEYS.sprint];
   const crouch = keys[KEYS.crouch];
   p.crouching = !!crouch;
-  const baseSpeed = crouch ? 2.2 : sprint ? 11 : keys[KEYS.forward] || keys[KEYS.back] ? 5.5 : 0;
+  const moving = keys[KEYS.forward] || keys[KEYS.back] || keys[KEYS.left] || keys[KEYS.right];
+  const baseSpeed = crouch ? 2.2 : sprint ? 11.5 : moving ? 5.5 : 0;
   let fx = 0;
   let fz = 0;
   if (keys[KEYS.forward]) { fx -= Math.sin(p.yaw); fz -= Math.cos(p.yaw); }
@@ -65,6 +66,7 @@ export function updatePlayer(G, dt) {
   if (keys[KEYS.right]) { fx += Math.cos(p.yaw); fz -= Math.sin(p.yaw); }
   const len = Math.hypot(fx, fz);
   if (len > 0) { fx /= len; fz /= len; }
+  // Smooth acceleration: the hero eases up to speed instead of snapping to it.
   const target = len > 0 ? baseSpeed : 0;
   p.speed += (target - p.speed) * Math.min(1, dt * 10);
   let nx = p.x + fx * p.speed * dt;
@@ -87,7 +89,8 @@ export function updatePlayer(G, dt) {
     if (p.y <= 0) { p.y = 0; p.vy = 0; p.onGround = true; }
   }
 
-  // Walk-cycle animation: limbs swing opposite, arms counter the legs.
+  // Walk-cycle: limbs swing opposite, arms counter the legs, and the body leans
+  // a touch forward at a sprint.
   if (p.speed > 0.3) p.walkPhase += dt * p.speed * 1.6;
   const swing = Math.min(1, p.speed / 6) * 0.7;
   const s = Math.sin(p.walkPhase);
@@ -95,28 +98,36 @@ export function updatePlayer(G, dt) {
   p.legR.rotation.x = -s * swing;
   p.armL.rotation.x = -s * swing * 0.8;
   p.armR.rotation.x = s * swing * 0.8;
+  p.torso.rotation.x = p.speed > 9 ? 0.12 : 0;
   p.group.scale.y = crouch ? 0.72 : 1;
   p.group.position.set(p.x, p.y, p.z);
   p.group.rotation.y = p.yaw;
   return p.speed;
 }
 
-// Third-person camera: behind and above the player (or the car), eased toward its
-// target so it never snaps. Mouse drag orbits; wheel zooms.
+// Third-person camera: behind and above the player (or the car), eased toward
+// its target so it never snaps. Mouse drag orbits; wheel zooms; the field of
+// view widens a little at speed, which sells the sense of going fast.
 export function updateCamera(G, dt) {
   const cam = G.camera;
-  const target = G.currentVehicle
+  const driving = !!G.currentVehicle;
+  const target = driving
     ? { x: G.currentVehicle.x, y: 1.5, z: G.currentVehicle.z, yaw: G.currentVehicle.yaw }
     : { x: G.player.x, y: 1.6, z: G.player.z, yaw: G.player.yaw };
-  const dist = G.currentVehicle ? 13 : 8.5;
-  const height = G.currentVehicle ? 5 : 3.6;
-  const orbit = G.camOrbit;
-  const yaw = target.yaw + orbit;
+  const speed01 = driving ? Math.min(1, Math.abs(G.currentVehicle.speed) / 60) : Math.min(1, G.player.speed / 11);
+  const dist = driving ? 13 : 8.5;
+  const height = driving ? 5 : 3.6;
+  const yaw = target.yaw + (G.camOrbit || 0);
   const cx = target.x + Math.sin(yaw) * dist;
   const cz = target.z + Math.cos(yaw) * dist;
   const k = 1 - Math.exp(-dt * 7);
   cam.position.x += (cx - cam.position.x) * k;
-  cam.position.y += (height - cam.position.y) * k;
+  cam.position.y += (height + (G.camPitch || 0) * 3 - cam.position.y) * k;
   cam.position.z += (cz - cam.position.z) * k;
-  cam.lookAt(target.x, target.y, target.z);
+  cam.lookAt(target.x, target.y + (G.camPitch || 0) * 2, target.z);
+  const wantFov = 62 + speed01 * 10;
+  if (Math.abs(cam.fov - wantFov) > 0.1) {
+    cam.fov += (wantFov - cam.fov) * Math.min(1, dt * 4);
+    cam.updateProjectionMatrix();
+  }
 }

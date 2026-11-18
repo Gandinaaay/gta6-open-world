@@ -1,5 +1,7 @@
-// Synthesised sound: every noise in Vice Bay is built with WebAudio oscillators and
-// filtered noise at runtime — no audio files, no network, nothing to download.
+// Synthesised sound: every noise in Vice Bay is built with WebAudio oscillators
+// and filtered noise at runtime — no audio files, no network, nothing to download.
+// The AudioContext is created lazily on the first user gesture (unlock), because
+// browsers refuse to start audio before one.
 export function createAudio() {
   let ctx = null;
   let master = null;
@@ -16,9 +18,9 @@ export function createAudio() {
       const AC = window.AudioContext || window.webkitAudioContext;
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = volume;
+      master.gain.value = muted ? 0 : volume;
       master.connect(ctx.destination);
-      // Engine: a low sawtooth whose pitch follows speed, plus a rumble.
+      // Engine: a low sawtooth whose pitch follows speed, through a low-pass.
       engineOsc = ctx.createOscillator();
       engineOsc.type = 'sawtooth';
       engineOsc.frequency.value = 55;
@@ -31,7 +33,7 @@ export function createAudio() {
       engineFilter.connect(engineGain);
       engineGain.connect(master);
       engineOsc.start();
-      // Siren: two-tone triangle that wails while the police chase you.
+      // Siren: a two-tone triangle that wails while the police chase you.
       sirenOsc = ctx.createOscillator();
       sirenOsc.type = 'triangle';
       sirenOsc.frequency.value = 700;
@@ -89,7 +91,7 @@ export function createAudio() {
       if (!ensure() || muted) return;
       const t = ctx.currentTime;
       engineGain.gain.setTargetAtTime(on ? 0.05 + speed01 * 0.09 : 0, t, 0.08);
-      engineOsc.frequency.setTargetAtTime(50 + speed01 * 160, t, 0.08);
+      engineOsc.frequency.setTargetAtTime(50 + speed01 * 170, t, 0.08);
     },
     siren(on, wanted) {
       if (!ensure() || muted) return;
@@ -97,6 +99,7 @@ export function createAudio() {
       sirenGain.gain.setTargetAtTime(on ? 0.03 + wanted * 0.008 : 0, t, 0.2);
       if (on) sirenOsc.frequency.setTargetAtTime(650 + Math.sin(t * 2.2) * 220, t, 0.05);
     },
+    skid() { noiseBurst(0.18, 900, 0.22, 'highpass'); },
     gunshot() { noiseBurst(0.14, 1800, 0.5); tone(160, 0.1, 'square', 0.25, 60); },
     punch() { noiseBurst(0.08, 300, 0.45, 'lowpass'); },
     crash() { noiseBurst(0.3, 500, 0.6, 'lowpass'); tone(90, 0.25, 'sine', 0.4, 40); },

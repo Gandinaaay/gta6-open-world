@@ -1,12 +1,17 @@
-// Vice Bay itself: ground, the road grid, eight districts with their own buildings,
-// the beach and sea, the airport runway, the port containers, trees, lamps, traffic
-// lights, shops and the named places the missions send you to.
+// Vice Bay itself: the ground, the road grid, eight districts with their own
+// buildings, the beach and the sea, the airport runway, the port container yard,
+// trees, lamps, traffic lights, shop fronts and the named places the missions
+// send you to. Everything the player can walk or drive into is a box collider
+// returned by buildCity; the rest is scenery.
 import { WORLD, DISTRICTS, districtAt } from './config.js';
 import {
   buildingTexture, houseTexture, roadTexture, sidewalkTexture, grassTexture,
   sandTexture, waterTexture, runwayTexture, containerTexture, billboardTexture,
+  neonTexture,
 } from './textures.js';
 
+// Named places, in world units. Missions and side missions look these up by key,
+// so a place key must never be renamed without updating missions.js too.
 export const PLACES = {
   start: { x: 0, z: 120, name: 'Rico\'s Apartment' },
   friendHouse: { x: -260, z: 300, name: 'Marco\'s Place' },
@@ -20,6 +25,8 @@ export const PLACES = {
   club: { x: 420, z: 120, name: 'Neon Tide Club' },
   bank: { x: -60, z: -120, name: 'Bay National Bank' },
   market: { x: -320, z: 220, name: 'Havana Market' },
+  pier: { x: 520, z: 60, name: 'Ocean Pier' },
+  beach: { x: 430, z: -200, name: 'Ocean Beach' },
 };
 
 export const SHOPS = [
@@ -51,7 +58,7 @@ export function buildCity(scene, random) {
   const roadTex = roadTexture();
   const sidewalkTex = sidewalkTexture();
 
-  // Ground: grass base, sand on the east beach, sea beyond it.
+  // Ground: grass everywhere, sand on the east beach strip, sea beyond it.
   const ground = new THREE.Mesh(new THREE.PlaneGeometry(WORLD.size, WORLD.size), new THREE.MeshLambertMaterial({ map: grassTex }));
   ground.rotation.x = -Math.PI / 2;
   ground.receiveShadow = true;
@@ -66,7 +73,8 @@ export function buildCity(scene, random) {
   sea.position.set(700, 0.02, 0);
   group.add(sea);
 
-  // Roads: a grid every 100 units, plus the highway ring around the edge.
+  // Roads: a grid every 100 units, sidewalks hugging each road, plus the
+  // highway ring drawn as a darker band around the edge of the map.
   const roadMat = new THREE.MeshLambertMaterial({ map: roadTex });
   const sideMat = new THREE.MeshLambertMaterial({ map: sidewalkTex });
   for (let c = -400; c <= 400; c += 100) {
@@ -89,8 +97,15 @@ export function buildCity(scene, random) {
     sh.position.set(0, 0.06, c);
     group.add(sh);
   }
+  const ringMat = new THREE.MeshLambertMaterial({ color: 0x1f2226 });
+  for (const [w, d, x, z] of [[1000, 20, 0, -490], [1000, 20, 0, 490], [20, 1000, -490, 0], [20, 1000, 490, 0]]) {
+    const ring = new THREE.Mesh(new THREE.PlaneGeometry(w, d), ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.09, z);
+    group.add(ring);
+  }
 
-  // Airport runway + terminal apron.
+  // Airport runway and apron.
   const runway = new THREE.Mesh(new THREE.PlaneGeometry(60, 260), new THREE.MeshLambertMaterial({ map: runwayTexture() }));
   runway.rotation.x = -Math.PI / 2;
   runway.position.set(230, 0.09, 350);
@@ -144,8 +159,8 @@ export function buildCity(scene, random) {
     lamps.push(bulb);
   }
 
-  // Buildings block by block. The airport and beach blocks stay open; the port gets
-  // warehouses and container stacks instead of towers.
+  // One building pass per 100-unit block. The airport and beach stay open;
+  // the port gets warehouses and container stacks instead of towers.
   const containerColors = ['#b03a2e', '#2e86ab', '#e67e22', '#27ae60', '#8e44ad'];
   for (let bx = -500; bx < 500; bx += 100) {
     for (let bz = -500; bz < 500; bz += 100) {
@@ -192,11 +207,11 @@ export function buildCity(scene, random) {
           addBuilding(cx + random.range(-22, 22), cz + random.range(-22, 22), random.range(16, 26), random.range(14, 30), random.range(16, 26), random.pick(towerMats));
         }
       }
-      if (random() < 0.3) addLamp(bx + random.range(10, 90), bz + 12);
+      if (random() < 0.35) addLamp(bx + random.range(10, 90), bz + 12);
     }
   }
 
-  // Airport terminal + hangars, and the port's big container yard.
+  // Airport terminal, hangars, and the port's big container yard.
   addBuilding(150, 350, 60, 14, 30, new THREE.MeshLambertMaterial({ map: towerTex2 }));
   addBuilding(300, 280, 34, 10, 24, wareMat);
   addBuilding(300, 430, 34, 10, 24, wareMat);
@@ -210,7 +225,8 @@ export function buildCity(scene, random) {
     colliders.push({ x0: x - 6, z0: z - 1.5, x1: x + 6, z1: z + 1.5 });
   }
 
-  // Billboards over Downtown and the beach strip.
+  // Billboards over Downtown and the beach strip, plus a glowing neon sign
+  // for the Neon Tide Club so the beach reads at night.
   const bb1 = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), new THREE.MeshBasicMaterial({ map: billboardTexture('VICE BAY', '#d21f3c', '#ffffff') }));
   bb1.position.set(0, 26, -195);
   group.add(bb1);
@@ -218,8 +234,15 @@ export function buildCity(scene, random) {
   bb2.position.set(400, 20, 120);
   bb2.rotation.y = -Math.PI / 2;
   group.add(bb2);
+  const neon = new THREE.Mesh(new THREE.PlaneGeometry(22, 8), new THREE.MeshBasicMaterial({ map: neonTexture('NEON TIDE', '#2ec4b6') }));
+  neon.position.set(420, 12, 112);
+  neon.rotation.y = -Math.PI / 2;
+  group.add(neon);
+  const bb3 = new THREE.Mesh(new THREE.PlaneGeometry(30, 15), new THREE.MeshBasicMaterial({ map: billboardTexture('HAVANA MARKET', '#c96f4a', '#ffffff') }));
+  bb3.position.set(-320, 14, 220);
+  group.add(bb3);
 
-  // Traffic lights at the big intersections, cycling green/red by axis.
+  // Traffic lights at the big Downtown intersections, cycling green/red.
   for (let x = -200; x <= 200; x += 200) {
     for (let z = -200; z <= 200; z += 200) {
       const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 7, 6), new THREE.MeshLambertMaterial({ color: 0x222222 }));
@@ -236,7 +259,7 @@ export function buildCity(scene, random) {
     }
   }
 
-  // Shop fronts: a coloured awning box + a floating sign, walk up and press E.
+  // Shop fronts: a coloured awning box and a floating sign. Walk up, press E.
   for (const shop of SHOPS) {
     const front = box(14, 6, 2, new THREE.MeshLambertMaterial({ color: shop.color }), shop.x, 3, shop.z);
     group.add(front);
@@ -247,14 +270,15 @@ export function buildCity(scene, random) {
     shop.sign = sign;
   }
 
-  // A pier jutting into the sea at Ocean Beach.
+  // A wooden pier jutting into the sea at Ocean Beach.
   const pier = box(10, 1, 80, new THREE.MeshLambertMaterial({ color: 0x8a6b45 }), 520, 1, 60);
   group.add(pier);
 
   return { colliders, trafficLights, lamps, group };
 }
 
-// Circle (player / car) vs building AABBs: push the circle out of any box it overlaps.
+// Circle (player or car) against building AABBs: push the circle out through
+// whichever face is nearest, so nothing ever ends up inside a building.
 export function collideCircle(colliders, x, z, radius) {
   let px = x;
   let pz = z;

@@ -1,5 +1,6 @@
-// Living streets: traffic cars that drive the road grid and stop at red lights, and
-// pedestrians on the sidewalks who panic and run when they see a crime.
+// Living streets: traffic cars that drive the road grid in their own lane and
+// stop at red lights, and pedestrians on the sidewalks who panic and run when
+// they see a crime. Traffic never runs out — cars wrap around the edge of the map.
 import { VEHICLE_TYPES } from './config.js';
 import { spawnVehicle } from './vehicles.js';
 import { districtAt } from './config.js';
@@ -20,7 +21,10 @@ export function spawnTrafficCar(G, random) {
   const district = districtAt(p.x, p.z);
   v.ai = {
     axis: p.axis, dir: p.dir, line: p.axis === 'x' ? p.x : p.z,
+    // Highway traffic is faster; quiet districts are slower. Each car holds a
+    // lane offset so two-way traffic does not drive head-on down the centre.
     speed: random.range(10, 18) * (district.id === 'highway' ? 1.6 : district.density),
+    lane: random.pick([-3.5, 3.5]),
     wait: 0,
   };
   G.vehicles.push(v);
@@ -48,9 +52,16 @@ export function updateTraffic(G, dt, random) {
     } else {
       v.speed += (ai.speed - v.speed) * Math.min(1, dt * 1.5);
     }
+    // Swerve a little if the player's car is bearing down on this lane.
+    let swerve = 0;
+    if (G.currentVehicle && Math.abs(G.currentVehicle.speed) > 10) {
+      const d = Math.hypot(v.x - G.currentVehicle.x, v.z - G.currentVehicle.z);
+      if (d < 22) swerve = (v.x > G.currentVehicle.x ? 1 : -1) * 2.5 * dt;
+    }
     // Move along the road; at an intersection, sometimes turn onto the cross street.
     if (ai.axis === 'x') {
       v.x += ai.dir * v.speed * dt;
+      v.z += swerve;
       const nearCross = Math.abs(v.x % 100) < 3 || Math.abs(v.x % 100) > 97;
       if (nearCross && random() < dt * 0.5) {
         ai.axis = 'z';
@@ -60,6 +71,7 @@ export function updateTraffic(G, dt, random) {
       }
     } else {
       v.z += ai.dir * v.speed * dt;
+      v.x += swerve;
       const nearCross = Math.abs(v.z % 100) < 3 || Math.abs(v.z % 100) > 97;
       if (nearCross && random() < dt * 0.5) {
         ai.axis = 'x';

@@ -1,6 +1,7 @@
-// Vehicles: box-built cars, SUVs, bikes, taxis, trucks and police interceptors, with
-// arcade driving (acceleration, braking, steering that tightens with speed, damage),
-// entering, exiting and stealing them off the street.
+// Vehicles: box-built cars, SUVs, bikes, taxis, trucks and police interceptors,
+// with arcade driving (acceleration, braking, steering that tightens with speed,
+// a Space handbrake for sliding turns, damage) and entering, exiting and
+// stealing them off the street.
 import { VEHICLE_TYPES, KEYS } from './config.js';
 import { collideCircle, clampToWorld } from './city.js';
 
@@ -43,6 +44,9 @@ export function makeVehicleMesh(typeKey) {
   const bodyH = typeKey === 'suv' || typeKey === 'truck' ? 1.1 : 0.75;
   group.add(carPart(wide, bodyH, long, color, 0, 0.75, 0));
   group.add(carPart(wide * 0.85, 0.65, long * 0.5, 0x000000, 0, 1.35, typeKey === 'truck' ? 1.2 : -0.2, glass));
+  // A thin spoiler on the sport car and a roof rack on the SUV, so the silhouettes differ.
+  if (typeKey === 'sport') group.add(carPart(wide * 0.9, 0.08, 0.4, 0x111111, 0, 1.25, long / 2 - 0.3));
+  if (typeKey === 'suv') group.add(carPart(wide * 0.7, 0.1, long * 0.6, 0x111111, 0, 1.75, 0));
   if (typeKey === 'police') {
     group.add(carPart(wide * 0.9, 0.25, 0.5, 0xffffff, 0, 1.15, 0.4));
     group.add(carPart(0.5, 0.25, 0.5, 0xff0000, -0.5, 1.75, -0.2));
@@ -88,27 +92,29 @@ export function spawnVehicle(scene, typeKey, x, z, yaw = 0, opts = {}) {
   return v;
 }
 
-// Arcade driving: W accelerates, S brakes/reverses, A/D steer (tighter at low speed),
-// collisions with buildings slow you down and dent the car.
+// Arcade driving: W accelerates, S brakes or reverses, A/D steer (tighter at low
+// speed), Space is the handbrake — it cuts grip and lets the tail slide around
+// a corner, with a skid sound. Hitting a building slows you down and dents the car.
 export function driveVehicle(G, v, dt) {
   const keys = G.keys;
   const up = G.upgrades || {};
   const top = v.topSpeed * (up.engine2 ? 1.3 : up.engine1 ? 1.15 : 1);
   const grip = up.tires1 ? 1.25 : 1;
-  const accel = v.type.accel * (keys[KEYS.forward] ? 1 : 0);
-  const brake = keys[KEYS.back] ? v.type.brake : 0;
-  if (keys[KEYS.forward]) v.speed += accel * dt;
+  const handbrake = !!keys[KEYS.jump];
+  if (keys[KEYS.forward]) v.speed += v.type.accel * dt;
   if (keys[KEYS.back]) {
-    if (v.speed > 1) v.speed -= brake * dt;
+    if (v.speed > 1) v.speed -= v.type.brake * dt;
     else v.speed = Math.max(-12, v.speed - 10 * dt);
   }
-  // Drag and rolling resistance.
-  v.speed -= v.speed * 0.55 * dt;
+  // Drag, rolling resistance, and the handbrake bleeding speed fast.
+  v.speed -= v.speed * (handbrake ? 1.6 : 0.55) * dt;
   if (!keys[KEYS.forward] && !keys[KEYS.back]) v.speed -= Math.sign(v.speed) * Math.min(Math.abs(v.speed), 8 * dt);
   v.speed = Math.max(-14, Math.min(top, v.speed));
   const steer = (keys[KEYS.left] ? 1 : 0) - (keys[KEYS.right] ? 1 : 0);
   const dir = v.speed >= 0 ? 1 : -1;
-  v.yaw += steer * v.type.turn * grip * Math.min(1, Math.abs(v.speed) / 14) * dir * dt;
+  const steerPower = v.type.turn * grip * (handbrake ? 1.7 : 1) * Math.min(1, Math.abs(v.speed) / 14);
+  v.yaw += steer * steerPower * dir * dt;
+  if (handbrake && steer !== 0 && Math.abs(v.speed) > 12 && G.audio) G.audio.skid();
   const nx = v.x - Math.sin(v.yaw) * v.speed * dt;
   const nz = v.z - Math.cos(v.yaw) * v.speed * dt;
   const before = { x: v.x, z: v.z };
@@ -117,7 +123,8 @@ export function driveVehicle(G, v, dt) {
   const moved = Math.hypot(clamped.x - before.x, clamped.z - before.z);
   const wanted = Math.hypot(nx - before.x, nz - before.z);
   if (wanted - moved > 0.05 && Math.abs(v.speed) > 8) {
-    v.health = Math.max(0, v.health - Math.abs(v.speed) * 0.6);
+    const armour = up.armor1 ? 0.6 : 1;
+    v.health = Math.max(0, v.health - Math.abs(v.speed) * 0.6 * armour);
     v.damage += Math.abs(v.speed) * 0.4;
     if (G.audio) G.audio.crash();
     if (G.onVehicleCrash) G.onVehicleCrash(Math.abs(v.speed));
@@ -126,7 +133,8 @@ export function driveVehicle(G, v, dt) {
   v.z = clamped.z;
   v.group.position.set(v.x, 0, v.z);
   v.group.rotation.y = v.yaw;
-  v.group.rotation.z = -steer * Math.min(1, Math.abs(v.speed) / 30) * 0.06;
+  // Body roll into the turn, stronger with the handbrake out.
+  v.group.rotation.z = -steer * Math.min(1, Math.abs(v.speed) / 30) * (handbrake ? 0.12 : 0.06);
   for (const w of v.wheels) w.rotation.x += v.speed * dt * 2.4;
   if (v.isPolice && v.group.userData.lightBar) {
     v.lightPhase += dt * 6;

@@ -1,8 +1,8 @@
-// The screenshot scenes behind ?shot=start|play|chase|night. Each one stages a real
-// moment of the game — the same world, the same rules, driven forward a few seconds
-// by a scripted driver — so the frame is what playing really looks like and the same
-// seed always gives the same frame. The briefing panel is hidden for the shot so the
-// city, the car and the HUD fill the frame.
+// The screenshot scenes behind ?shot=start|play|chase|night. Each one stages a
+// real moment of the game — the same world, the same rules, driven forward a few
+// seconds by a scripted driver — so the frame is what playing really looks like
+// and the same seed always gives the same frame. The briefing panel is hidden
+// for the shot so the city, the car and the HUD fill the frame.
 import { STEP } from './config.js';
 import { enterVehicle } from './vehicles.js';
 
@@ -27,6 +27,16 @@ function walkFor(G, seconds) {
   G.keys.KeyW = false;
 }
 
+function takeCar(G, x, z, yaw) {
+  const car = G.vehicles.find((v) => v.typeKey === 'sport' && !v.isPlayer) || G.vehicles[0];
+  car.x = x;
+  car.z = z;
+  car.yaw = yaw;
+  car.health = 92;
+  enterVehicle(G, car);
+  return car;
+}
+
 export function stageShot(name, G) {
   G.screen = 'play';
   G.player.health = 100;
@@ -48,21 +58,16 @@ export function stageShot(name, G) {
     return 'title';
   }
   if (name === 'chase') {
-    // Night in Downtown: 3 wanted stars, VBPD interceptors on your tail, the mission
-    // marker glowing ahead and the minimap full of blue dots.
+    // Night in Downtown: 3 wanted stars, VBPD interceptors on your tail, the
+    // mission marker glowing ahead and the minimap full of blue dots.
     G.dayTime = 0.97;
     G.weather = 'clear';
-    const car = G.vehicles.find((v) => v.typeKey === 'sport' && !v.isPlayer) || G.vehicles[0];
-    car.x = 0;
-    car.z = -100;
-    car.yaw = 0;
-    car.health = 92;
-    enterVehicle(G, car);
+    takeCar(G, 0, -100, 0);
     G.wanted = 3;
     G.missionText = 'Mission 4: The Getaway — escape the police pursuit!';
     G.missionTarget = { x: 0, z: -400 };
     driveFor(G, 4, 0);
-    // Reset the ram damage for the frame, then pull three pursuit cars into view
+    // Reset the ram damage for the frame, then pull the pursuit cars into view
     // ahead of the player, flanking the road, so the chase reads at a glance.
     G.currentVehicle.health = 88;
     const px = G.currentVehicle.x;
@@ -70,7 +75,7 @@ export function stageShot(name, G) {
     const yaw = G.currentVehicle.yaw;
     const fx = -Math.sin(yaw);
     const fz = -Math.cos(yaw);
-    const spots = [[16, -7], [20, 7], [27, 0]];
+    const spots = [[16, -7], [20, 7], [27, 0], [33, -7]];
     for (let i = 0; i < spots.length && i < G.police.length; i += 1) {
       const cop = G.police[i];
       cop.x = px + fx * spots[i][0] - fz * spots[i][1];
@@ -86,15 +91,11 @@ export function stageShot(name, G) {
     return 'play';
   }
   if (name === 'night') {
-    // Night Run: the illegal beach race at Ocean Beach, rain on the road, the race
-    // checkpoints and the neon club glowing behind you.
+    // Night Run: the illegal beach race at Ocean Beach, rain on the road, the
+    // race checkpoints and the neon club glowing behind you.
     G.dayTime = 0.94;
     G.weather = 'rain';
-    const car = G.vehicles.find((v) => v.typeKey === 'sport' && !v.isPlayer) || G.vehicles[0];
-    car.x = 400;
-    car.z = -40;
-    car.yaw = 0;
-    enterVehicle(G, car);
+    takeCar(G, 400, -40, 0);
     G.wanted = 0;
     G.missions.missionIndex = 6;
     G.missions.startMission(6);
@@ -102,15 +103,11 @@ export function stageShot(name, G) {
     hideBriefing();
     return 'play';
   }
-  // play: midday Downtown, driving the Comet GT through live traffic with a mission
-  // objective on the HUD and the minimap.
+  // play: midday Downtown, driving the Comet GT through live traffic with a
+  // mission objective on the HUD and the minimap.
   G.dayTime = 0.35;
   G.weather = 'clear';
-  const car = G.vehicles.find((v) => v.typeKey === 'sport' && !v.isPlayer) || G.vehicles[0];
-  car.x = 0;
-  car.z = 150;
-  car.yaw = Math.PI;
-  enterVehicle(G, car);
+  takeCar(G, 0, 150, Math.PI);
   G.wanted = 0;
   G.missions.missionIndex = 0;
   G.missions.startMission(0);

@@ -1,6 +1,7 @@
-// The world: builds the renderer, the sky and the day/night cycle, rain, the city,
-// the player, traffic, police, combat and missions, and steps them all in one place.
-// Nothing here knows about menus — main.js owns the screens and calls update().
+// The world: builds the renderer, the sky and the day/night cycle, rain, the
+// city, the player, traffic, police, combat and missions, and steps them all in
+// one place. Nothing here knows about menus — main.js owns the screens and
+// calls update(). The game state object G is the one thing every module shares.
 import { WORLD, STEP, DAY_LENGTH, KEYS, districtAt } from './config.js';
 import { createRandom } from './random.js';
 import { createAudio } from './audio.js';
@@ -46,7 +47,7 @@ export function createGame(canvas, seed) {
   const G = {
     renderer, scene, camera, sun, hemi, random, audio,
     city, player, keys: {}, pressed: new Set(),
-    camOrbit: 0, mouseDown: false,
+    camOrbit: 0, camPitch: 0, mouseDown: false, mouseFire: false,
     screen: 'title',
     money: 500, rep: 0, wanted: 0, wantedTimer: 0, crimeFlash: 0,
     vehicles: [], peds: [], police: [], patrol: [], enemies: [],
@@ -67,6 +68,7 @@ export function createGame(canvas, seed) {
     if (G.player.health <= 0) G.wasted(cause);
   };
   G.playerYaw = () => (G.currentVehicle ? G.currentVehicle.yaw : G.player.yaw);
+  G.speedKmh = () => (G.currentVehicle ? Math.abs(G.currentVehicle.speed) * 3.6 : G.player.speed * 3.6);
   G.currentDistrict = districtAt(player.x, player.z);
   G.clockText = () => {
     const total = Math.floor(G.dayTime * 24 * 60);
@@ -236,7 +238,6 @@ export function createGame(canvas, seed) {
     const angle = t * Math.PI * 2;
     const elev = Math.sin(angle);
     const day = Math.max(0, elev);
-    const dusk = Math.max(0, 1 - Math.abs(elev) * 3);
     sun.position.set(Math.cos(angle) * 300, Math.max(20, elev * 300), 180);
     sun.intensity = 0.25 + day * 0.9;
     sun.color.setHex(elev > 0.25 ? 0xfff2d8 : 0xff9a5c);
@@ -338,12 +339,12 @@ export function createGame(canvas, seed) {
       else if (nearestVehicle(G)) G.interactPrompt = '[F] Steal / enter ' + nearestVehicle(G).type.name;
       else G.interactPrompt = '';
     } else {
-      G.interactPrompt = '[F] Exit vehicle · [H] Horn';
+      G.interactPrompt = '[F] Exit vehicle · [Space] Handbrake · [H] Horn';
     }
 
     G.currentDistrict = districtAt(G.currentVehicle ? G.currentVehicle.x : G.player.x, G.currentVehicle ? G.currentVehicle.z : G.player.z);
     G.hud.update();
-    G.sunTarget = { x: G.player.x, z: G.player.z };
+    // Keep the sun's shadow box centred on the player so shadows stay crisp.
     sun.target.position.set(G.player.x, 0, G.player.z);
     scene.add(sun.target);
   };

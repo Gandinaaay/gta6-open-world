@@ -1,5 +1,7 @@
-// A small seeded random number generator (mulberry32): the same seed gives the same
-// city, traffic and screenshot scenes, which is what makes the game repeatable.
+// Seeded randomness for Vice Bay (mulberry32). One seed builds the same city,
+// the same parked cars and the same screenshot scenes every time, which is what
+// makes the game — and its screenshots — repeatable. Runtime-only variety that
+// must not change the world uses plain Math.random through randomRange() instead.
 export function createRandom(seed) {
   let a = seed | 0;
   function random() {
@@ -12,10 +14,20 @@ export function createRandom(seed) {
   random.int = (min, max) => Math.floor(random.range(min, max + 1));
   random.pick = (arr) => arr[Math.floor(random() * arr.length)];
   random.chance = (p) => random() < p;
+  random.shuffle = (arr) => {
+    const out = arr.slice();
+    for (let i = out.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(random() * (i + 1));
+      const tmp = out[i];
+      out[i] = out[j];
+      out[j] = tmp;
+    }
+    return out;
+  };
   return random;
 }
 
-// A fast non-seeded shuffle-free pick for runtime variety.
+// Unseeded one-liner for effects, timers and spawn jitter that need no replay.
 export function randomRange(min, max) {
   return min + Math.random() * (max - min);
 }

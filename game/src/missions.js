@@ -1,8 +1,9 @@
-// The story: 10 linked main missions in "Blood & Destiny", each a list of steps the
-// engine plays (go to, drive to, deliver, kill, escape, race, collect, survive, talk),
-// plus 8 working side missions you start at markers around the city.
-// Step types: goto | drive | kill | collect | escape | race | survive | talk.
-// Every step carries its own marker, radius and reward; the engine advances them.
+// The story: 10 linked main missions in "Blood & Destiny", each a list of steps
+// the engine plays (go to, drive to, deliver, kill, escape, race, collect, talk,
+// choice), plus 8 working side missions you start at markers around the city.
+// Step types: goto | drive | deliver | kill | collect | escape | race | talk | choice.
+// Every step carries its own marker, radius and reward; the engine advances them,
+// and the HUD shows the current step text plus a live distance to the marker.
 import { PLACES } from './city.js';
 import { spawnEnemy, clearEnemies } from './combat.js';
 import { spawnVehicle } from './vehicles.js';
@@ -113,6 +114,8 @@ export const SIDE_MISSIONS = [
   { id: 'rescue', name: 'Rescue Civilians', desc: 'Pick up a hurt civilian and drive them to the hospital.', place: 'hospital', reward: 750 },
 ];
 
+// The Night Run route: a loop from the beach, through the hills, around
+// Downtown and back to the club. Side races reuse the first five points.
 const RACE_POINTS = [
   { x: 420, z: -60 }, { x: 400, z: -300 }, { x: 200, z: -400 },
   { x: -100, z: -400 }, { x: -300, z: -200 }, { x: -400, z: 0 },
@@ -167,7 +170,7 @@ export function createMissionEngine(G) {
       }
       if (step.type === 'race') {
         engine.stepState.raceIndex = 0;
-        engine.stepState.timer = 150;
+        engine.stepState.timer = 180;
       }
       engine.updateMarker();
     },
@@ -238,9 +241,9 @@ export function createMissionEngine(G) {
       if (step.type === 'goto' || step.type === 'deliver' || step.type === 'talk') {
         if (target && Math.hypot(px - target.x, pz - target.z) < 10) engine.advanceStep();
       } else if (step.type === 'drive') {
-        if (G.currentVehicle && target && Math.hypot(px - target.x, pz - target.z) < 12) engine.advanceStep();
-        else if (!G.currentVehicle && target && Math.hypot(px - target.x, pz - target.z) < 12) {
-          G.missionText = step.text + ' (you need a car!)';
+        if (target && Math.hypot(px - target.x, pz - target.z) < 12) {
+          if (G.currentVehicle) engine.advanceStep();
+          else G.missionText = step.text + ' (you need a car!)';
         }
       } else if (step.type === 'kill') {
         st.kills = step.count - G.enemies.filter((e) => e.alive).length;
@@ -305,8 +308,11 @@ export function createMissionEngine(G) {
       } else if (id === 'territory') {
         for (let i = 0; i < 5; i += 1) spawnEnemy(G, PLACES.gangHQ.x + (Math.random() - 0.5) * 30, PLACES.gangHQ.z + (Math.random() - 0.5) * 30, { bounty: 200 });
       } else if (id === 'rescue') {
-        st.target = PLACES.hospital;
-        spawnEnemy(G, place.x, place.z, { color: 0x2ecc71, health: 50, bounty: 0 });
+        // The hurt civilian waits at the hospital entrance, 35 units east of the
+        // building; pick them up on foot, then drive them to the front door.
+        st.target = { x: place.x + 35, z: place.z + 15 };
+        st.phase = 0;
+        spawnEnemy(G, st.target.x, st.target.z, { color: 0x2ecc71, health: 50, bounty: 0, passive: true });
         G.toast('Rescue: reach the hurt civilian, then drive them to the hospital.');
       }
       G.missionText = 'Side mission: ' + def.name;
@@ -363,11 +369,15 @@ export function createMissionEngine(G) {
       } else if (def.id === 'territory') {
         if (G.enemies.filter((e) => e.alive).length === 0) finish(0);
       } else if (def.id === 'rescue') {
-        if (st.phase === 0 && Math.hypot(px - PLACES.hospital.x, pz - PLACES.hospital.z) < 60 && G.currentVehicle) {
+        // Phase 0: walk to the civilian at the entrance. Phase 1: in a car,
+        // drive them to the hospital front door.
+        if (st.phase === 0 && st.target && Math.hypot(px - st.target.x, pz - st.target.z) < 6) {
           st.phase = 1;
-          G.toast('Civilian in the car! Drive to Bay General Hospital.');
+          G.sideTarget = PLACES.hospital;
+          G.toast('Civilian picked up! Drive to Bay General Hospital.');
+        } else if (st.phase === 1 && G.currentVehicle && Math.hypot(px - PLACES.hospital.x, pz - PLACES.hospital.z) < 12) {
+          finish(0);
         }
-        if (st.phase === 1 && Math.hypot(px - PLACES.hospital.x, pz - PLACES.hospital.z) < 12) finish(0);
       }
     },
   };

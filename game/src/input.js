@@ -1,7 +1,8 @@
-// Keyboard and mouse input for Vice Bay. Held keys are read every frame; one-shot
-// presses (interact, enter vehicle, punch, weapon switch, pause, horn) are queued and
-// taken once by the loop, so a press between two frames is never lost or double-counted.
-// Mouse drag orbits the third-person camera; wheel zooms; left click shoots/punches.
+// Keyboard and mouse input for Vice Bay. Keys held down are read every frame;
+// one-shot presses (interact, enter vehicle, punch, pause, horn, confirm) are
+// queued as bit flags and taken exactly once by the main loop, so a press that
+// lands between two frames is never lost and never counted twice.
+// Arrow keys mirror WASD, and dragging the mouse orbits the third-person camera.
 import { KEYS } from './config.js';
 
 export const ACTION_INTERACT = 1;
@@ -10,6 +11,14 @@ export const ACTION_PUNCH = 4;
 export const ACTION_PAUSE = 8;
 export const ACTION_CONFIRM = 16;
 export const ACTION_HORN = 32;
+
+// Arrow key -> the WASD code it mirrors, so both layouts drive the same state.
+const ARROW_MIRROR = {
+  ArrowUp: KEYS.forward,
+  ArrowDown: KEYS.back,
+  ArrowLeft: KEYS.left,
+  ArrowRight: KEYS.right,
+};
 
 export function createInput(G) {
   const keys = G.keys;
@@ -20,27 +29,33 @@ export function createInput(G) {
 
   window.addEventListener('keydown', (event) => {
     if (event.target && (event.target.tagName === 'INPUT' || event.target.tagName === 'BUTTON')) return;
-    keys[event.code] = true;
+    const code = ARROW_MIRROR[event.code] || event.code;
+    keys[code] = true;
+    if (event.code !== code) keys[event.code] = true;
     if (event.repeat) return;
-    if (event.code === KEYS.interact) actions |= ACTION_INTERACT;
-    else if (event.code === KEYS.enterVehicle) actions |= ACTION_ENTER;
-    else if (event.code === KEYS.punch) actions |= ACTION_PUNCH;
-    else if (event.code === KEYS.pause) actions |= ACTION_PAUSE;
-    else if (event.code === KEYS.horn) actions |= ACTION_HORN;
-    else if (event.code === 'Enter' || event.code === KEYS.jump) actions |= ACTION_CONFIRM;
-    else if (event.code === KEYS.weapon1) G.combat.weapon = 'fists';
-    else if (event.code === KEYS.weapon2 && G.ownedWeapons.includes('pistol')) G.combat.weapon = 'pistol';
-    else if (event.code === KEYS.weapon3 && G.ownedWeapons.includes('smg')) G.combat.weapon = 'smg';
-    else if (event.code === KEYS.weapon4 && G.ownedWeapons.includes('shotgun')) G.combat.weapon = 'shotgun';
-    else if (event.code === KEYS.weapon5 && G.ownedWeapons.includes('rifle')) G.combat.weapon = 'rifle';
-    else if (event.code === KEYS.mission) G.toggleMissionMenu && G.toggleMissionMenu();
+    if (code === KEYS.interact) actions |= ACTION_INTERACT;
+    else if (code === KEYS.enterVehicle) actions |= ACTION_ENTER;
+    else if (code === KEYS.punch) actions |= ACTION_PUNCH;
+    else if (code === KEYS.pause) actions |= ACTION_PAUSE;
+    else if (code === KEYS.horn) actions |= ACTION_HORN;
+    else if (event.code === 'Enter' || code === KEYS.jump) actions |= ACTION_CONFIRM;
+    else if (code === KEYS.weapon1) G.combat.weapon = 'fists';
+    else if (code === KEYS.weapon2 && G.ownedWeapons.includes('pistol')) G.combat.weapon = 'pistol';
+    else if (code === KEYS.weapon3 && G.ownedWeapons.includes('smg')) G.combat.weapon = 'smg';
+    else if (code === KEYS.weapon4 && G.ownedWeapons.includes('shotgun')) G.combat.weapon = 'shotgun';
+    else if (code === KEYS.weapon5 && G.ownedWeapons.includes('rifle')) G.combat.weapon = 'rifle';
+    else if (code === KEYS.mission) G.toggleMissionMenu && G.toggleMissionMenu();
     if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) event.preventDefault();
   });
   window.addEventListener('keyup', (event) => {
+    const code = ARROW_MIRROR[event.code] || event.code;
+    keys[code] = false;
     keys[event.code] = false;
   });
   window.addEventListener('blur', () => {
     for (const k of Object.keys(keys)) keys[k] = false;
+    dragging = false;
+    G.mouseFire = false;
   });
 
   const canvas = G.renderer.domElement;
@@ -61,9 +76,10 @@ export function createInput(G) {
     const dy = event.clientY - lastY;
     lastX = event.clientX;
     lastY = event.clientY;
-    // Drag left/right orbits the camera; up/down tilts the player view a little.
+    // Dragging left/right orbits the camera and turns the hero with it.
     G.camOrbit += dx * 0.005;
     if (Math.abs(dx) > 2) G.player.yaw += dx * 0.002;
+    G.camPitch = Math.max(-0.6, Math.min(0.6, (G.camPitch || 0) - dy * 0.002));
   });
   canvas.addEventListener('wheel', (event) => {
     G.camOrbit += event.deltaY * 0.0005;

@@ -1,5 +1,7 @@
-// Procedural canvas textures: every surface in Vice Bay is painted at boot from code,
-// so the game ships zero image files and makes zero network requests.
+// Procedural canvas textures: every surface in Vice Bay is painted from code at
+// boot, so the game ships zero image files and makes zero network requests.
+// A texture is just a small canvas plus a repeat; windows, road paint, sand and
+// water are all drawn with the 2D context before the first frame.
 function canvasTexture(w, h, draw, repeatX = 1, repeatY = 1) {
   const c = document.createElement('canvas');
   c.width = w;
@@ -30,6 +32,9 @@ export function buildingTexture(base, random, floors = 12) {
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.fillRect(0, 0, w, 8);
     ctx.fillRect(0, h - 10, w, 10);
+    // A darker band halfway up breaks the facade into two blocks.
+    ctx.fillStyle = 'rgba(0,0,0,0.18)';
+    ctx.fillRect(0, Math.floor(h / 2), w, 6);
     litWindows(ctx, w, h, 6, floors, 0.45, random);
   });
 }
@@ -52,6 +57,7 @@ export function roadTexture() {
     ctx.fillRect(0, 0, w, h);
     ctx.fillStyle = '#34383f';
     for (let i = 0; i < 40; i += 1) ctx.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+    // Centre dashes and edge lines, worn a little at random.
     ctx.fillStyle = '#d8c84a';
     ctx.fillRect(w / 2 - 2, 8, 4, 40);
     ctx.fillRect(w / 2 - 2, h - 48, 4, 40);
@@ -133,9 +139,13 @@ export function containerTexture(color) {
     for (let x = 0; x < w; x += 16) {
       ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
     }
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.fillText('VB-PORT', 10, 24);
   });
 }
 
+// A big sign texture: text wrapped to a few centred lines on a flat colour.
 export function billboardTexture(text, bg, fg) {
   return canvasTexture(256, 128, (ctx, w, h) => {
     ctx.fillStyle = bg;
@@ -153,5 +163,23 @@ export function billboardTexture(text, bg, fg) {
     }
     lines.push(line.trim());
     lines.forEach((l, i) => ctx.fillText(l, w / 2, h / 2 + (i - (lines.length - 1) / 2) * 38));
+  });
+}
+
+// Neon-style sign: glowing letters on a dark plate, for clubs and shops at night.
+export function neonTexture(text, glow) {
+  return canvasTexture(256, 96, (ctx, w, h) => {
+    ctx.fillStyle = '#0a0a14';
+    ctx.fillRect(0, 0, w, h);
+    ctx.font = 'bold 40px system-ui, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = glow;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = glow;
+    ctx.fillText(text, w / 2, h / 2);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, w / 2, h / 2);
   });
 }

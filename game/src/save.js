@@ -1,6 +1,7 @@
 // Save and the economy: localStorage progress, and the four shops — Bay Arms
-// (weapons/ammo), Vice Motors (buy cars into your garage), Style House (clothes)
-// and the Tuner Garage (vehicle upgrades).
+// (weapons and ammo), Vice Motors (buy cars into your garage), Style House
+// (clothes) and the Tuner Garage (vehicle upgrades). The same panel serves the
+// shops and the garage; only its title and rows change.
 import { SAVE_KEY, WEAPONS, VEHICLE_TYPES, CLOTHES, UPGRADES } from './config.js';
 import { setShirtColor } from './player.js';
 import { spawnVehicle } from './vehicles.js';
@@ -120,7 +121,7 @@ export function openGarage(G) {
     const row = document.createElement('div');
     row.className = 'shop-row';
     const label = document.createElement('span');
-    label.textContent = t.name;
+    label.textContent = t.name + ' — top ' + Math.round(t.topSpeed * 3.6) + ' km/h';
     const btn = document.createElement('button');
     btn.textContent = 'SPAWN';
     btn.onclick = () => {
