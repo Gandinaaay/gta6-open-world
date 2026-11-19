@@ -1,30 +1,35 @@
-// Living streets, rewritten for the v4 recorded pass: traffic cars that drive
-// the road grid in their own lane and stop at red lights, and pedestrians on the
-// sidewalks who panic and run when they see a crime. Traffic never runs out —
-// cars wrap around the edge of the map. New in v4: pedestrians hurry for cover
-// in the rain, and traffic headlights are part of every car mesh.
+// Living streets: traffic cars that drive the road grid in their own lane
+// and stop at red lights, and pedestrians on the sidewalks who panic and run
+// when they see a crime. Traffic never runs out — cars wrap around the edge
+// of the map. Pedestrians hurry for cover in the rain, and traffic headlights
+// are part of every car mesh. Round 2: traffic AI keeps a heading vector
+// instead of an axis/dir pair, so turning at an intersection is one swap
+// of the heading instead of four yaw branches.
 import { VEHICLE_TYPES } from './config.js';
 import { spawnVehicle } from './vehicles.js';
 import { districtAt } from './config.js';
 
 const TRAFFIC_TYPES = ['sedan', 'sedan', 'suv', 'taxi', 'truck', 'sport'];
 
-function randomRoadPoint(random) {
-  const axis = random() < 0.5 ? 'x' : 'z';
+// A random point on the road grid with a heading along the road.
+function roadSpawn(random) {
+  const alongX = random() < 0.5;
   const line = (Math.floor(random() * 9) - 4) * 100;
   const along = random.range(-480, 480);
-  return axis === 'x' ? { x: line, z: along, axis, dir: random() < 0.5 ? 1 : -1 } : { x: along, z: line, axis, dir: random() < 0.5 ? 1 : -1 };
+  const dir = random() < 0.5 ? 1 : -1;
+  if (alongX) return { x: line, z: along, hx: dir, hz: 0, yaw: dir > 0 ? Math.PI : 0 };
+  return { x: along, z: line, hx: 0, hz: dir, yaw: dir > 0 ? -Math.PI / 2 : Math.PI / 2 };
 }
 
 export function spawnTrafficCar(G, random) {
-  const p = randomRoadPoint(random);
+  const p = roadSpawn(random);
   const typeKey = random.pick(TRAFFIC_TYPES);
-  const v = spawnVehicle(G.scene, typeKey, p.x, p.z, p.axis === 'x' ? (p.dir > 0 ? Math.PI : 0) : (p.dir > 0 ? -Math.PI / 2 : Math.PI / 2), { driver: 'traffic' });
+  const v = spawnVehicle(G.scene, typeKey, p.x, p.z, p.yaw, { driver: 'traffic' });
   const district = districtAt(p.x, p.z);
   v.ai = {
-    axis: p.axis, dir: p.dir, line: p.axis === 'x' ? p.x : p.z,
-    // Highway traffic is faster; quiet districts are slower. Each car holds a
-    // lane offset so two-way traffic does not drive head-on down the centre.
+    hx: p.hx, hz: p.hz,
+    // Highway traffic is faster; quiet districts are slower. Each car holds
+    // a lane offset so two-way traffic does not drive head-on down the centre.
     speed: random.range(10, 18) * (district.id === 'highway' ? 1.6 : district.density),
     lane: random.pick([-3.5, 3.5]),
     wait: 0,
@@ -33,54 +38,49 @@ export function spawnTrafficCar(G, random) {
   return v;
 }
 
+function redLightAhead(G, v) {
+  const ai = v.ai;
+  for (const light of G.city.trafficLights) {
+    const along = ai.hx !== 0 ? Math.abs(v.z - light.z) : Math.abs(v.x - light.x);
+    const ahead = ai.hx !== 0 ? Math.abs(v.x - light.x) : Math.abs(v.z - light.z);
+    if (along < 20 && ahead < 14 && light.red) return true;
+  }
+  return false;
+}
+
+function playerSwerve(G, v, dt) {
+  if (!G.currentVehicle || Math.abs(G.currentVehicle.speed) <= 10) return 0;
+  const d = Math.hypot(v.x - G.currentVehicle.x, v.z - G.currentVehicle.z);
+  if (d >= 22) return 0;
+  return (v.x > G.currentVehicle.x ? 1 : -1) * 2.5 * dt;
+}
+
 export function updateTraffic(G, dt, random) {
   for (const v of G.vehicles) {
     // Police pursuit cars run their own chase AI in police.js — the traffic
-    // grid (axis/dir) does not apply to them and would corrupt their position.
+    // heading does not apply to them and would corrupt their position.
     if (!v.ai || v.isPlayer || v.ai.chase) continue;
     const ai = v.ai;
-    // Red light ahead: stop at the intersection line.
-    let stopped = false;
-    if (ai.wait <= 0) {
-      for (const light of G.city.trafficLights) {
-        const onSameRoad = ai.axis === 'x' ? Math.abs(v.z - light.z) < 20 : Math.abs(v.x - light.x) < 20;
-        const approaching = ai.axis === 'x' ? Math.abs(v.x - light.x) < 14 : Math.abs(v.z - light.z) < 14;
-        if (onSameRoad && approaching && light.red) { stopped = true; break; }
-      }
-    }
-    if (stopped) {
+    if (ai.wait > 0) ai.wait -= dt;
+    if (ai.wait <= 0 && redLightAhead(G, v)) {
       ai.wait = 0.1;
       v.speed = Math.max(0, v.speed - 30 * dt);
-    } else {
+    } else if (ai.wait <= 0) {
       v.speed += (ai.speed - v.speed) * Math.min(1, dt * 1.5);
     }
-    // Swerve a little if the player's car is bearing down on this lane.
-    let swerve = 0;
-    if (G.currentVehicle && Math.abs(G.currentVehicle.speed) > 10) {
-      const d = Math.hypot(v.x - G.currentVehicle.x, v.z - G.currentVehicle.z);
-      if (d < 22) swerve = (v.x > G.currentVehicle.x ? 1 : -1) * 2.5 * dt;
-    }
-    // Move along the road; at an intersection, sometimes turn onto the cross street.
-    if (ai.axis === 'x') {
-      v.x += ai.dir * v.speed * dt;
-      v.z += swerve;
-      const nearCross = Math.abs(v.x % 100) < 3 || Math.abs(v.x % 100) > 97;
-      if (nearCross && random() < dt * 0.5) {
-        ai.axis = 'z';
-        ai.line = v.z;
-        ai.dir = random() < 0.5 ? 1 : -1;
-        v.yaw = ai.dir > 0 ? -Math.PI / 2 : Math.PI / 2;
-      }
-    } else {
-      v.z += ai.dir * v.speed * dt;
-      v.x += swerve;
-      const nearCross = Math.abs(v.z % 100) < 3 || Math.abs(v.z % 100) > 97;
-      if (nearCross && random() < dt * 0.5) {
-        ai.axis = 'x';
-        ai.line = v.x;
-        ai.dir = random() < 0.5 ? 1 : -1;
-        v.yaw = ai.dir > 0 ? Math.PI : 0;
-      }
+    const swerve = playerSwerve(G, v, dt);
+    v.x += ai.hx * v.speed * dt - ai.hz * swerve;
+    v.z += ai.hz * v.speed * dt + ai.hx * swerve;
+    // At an intersection, sometimes turn onto the cross street.
+    const along = ai.hx !== 0 ? v.x : v.z;
+    const nearCross = Math.abs(along % 100) < 3 || Math.abs(along % 100) > 97;
+    if (nearCross && random() < dt * 0.5) {
+      const turn = random() < 0.5 ? 1 : -1;
+      const nx = ai.hx !== 0 ? 0 : turn;
+      const nz = ai.hx !== 0 ? turn : 0;
+      ai.hx = nx;
+      ai.hz = nz;
+      v.yaw = nx !== 0 ? (nx > 0 ? Math.PI : 0) : (nz > 0 ? -Math.PI / 2 : Math.PI / 2);
     }
     // Wrap around the edge of the city so traffic never runs out.
     if (v.x > 495) v.x = -495;
@@ -103,15 +103,19 @@ export function updateTraffic(G, dt, random) {
   }
 }
 
+const PED_SHIRTS = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x9b59b6, 0xecf0f1];
+const PED_SKINS = [0xc98d64, 0x8d5524, 0xffdbac, 0x5c3a21];
+
 function makePedestrian(scene, random) {
   const group = new THREE.Group();
-  const shirt = new THREE.MeshLambertMaterial({ color: random.pick([0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x9b59b6, 0xecf0f1]) });
-  const skin = new THREE.MeshLambertMaterial({ color: random.pick([0xc98d64, 0x8d5524, 0xffdbac, 0x5c3a21]) });
+  const shirt = new THREE.MeshLambertMaterial({ color: random.pick(PED_SHIRTS) });
+  const skin = new THREE.MeshLambertMaterial({ color: random.pick(PED_SKINS) });
+  const pants = new THREE.MeshLambertMaterial({ color: 0x2b3a55 });
   const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.1, 0.45), shirt);
   torso.position.y = 1.45;
   const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), skin);
   head.position.y = 2.3;
-  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.9, 0.32), new THREE.MeshLambertMaterial({ color: 0x2b3a55 }));
+  const legL = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.9, 0.32), pants);
   legL.position.set(-0.22, 0.45, 0);
   const legR = legL.clone();
   legR.position.x = 0.22;
@@ -140,6 +144,13 @@ export function spawnPedestrian(G, random) {
   return ped;
 }
 
+function turnToward(ped, targetYaw, dt) {
+  let dy = targetYaw - ped.yaw;
+  while (dy > Math.PI) dy -= Math.PI * 2;
+  while (dy < -Math.PI) dy += Math.PI * 2;
+  ped.yaw += Math.max(-2 * dt, Math.min(2 * dt, dy));
+}
+
 export function updatePedestrians(G, dt, random) {
   const px = G.currentVehicle ? G.currentVehicle.x : G.player.x;
   const pz = G.currentVehicle ? G.currentVehicle.z : G.player.z;
@@ -155,21 +166,16 @@ export function updatePedestrians(G, dt, random) {
     const hurry = raining && ped.panic <= 0 ? 1.6 : 1;
     if (ped.panic > 0) {
       ped.panic -= dt;
-      const away = Math.atan2(ped.x - px, ped.z - pz);
-      ped.yaw = away;
-      ped.x += Math.sin(away) * 6 * dt;
-      ped.z += Math.cos(away) * 6 * dt;
+      ped.yaw = Math.atan2(ped.x - px, ped.z - pz);
+      ped.x += Math.sin(ped.yaw) * 6 * dt;
+      ped.z += Math.cos(ped.yaw) * 6 * dt;
       ped.phase += dt * 14;
     } else {
       ped.phase += dt * ped.speed * 3 * hurry;
       if (!ped.walkTarget || Math.hypot(ped.x - ped.walkTarget.x, ped.z - ped.walkTarget.z) < 3) {
         ped.walkTarget = { x: ped.x + random.range(-60, 60), z: ped.z + random.range(-60, 60) };
       }
-      const targetYaw = Math.atan2(ped.walkTarget.x - ped.x, ped.walkTarget.z - ped.z);
-      let dy = targetYaw - ped.yaw;
-      while (dy > Math.PI) dy -= Math.PI * 2;
-      while (dy < -Math.PI) dy += Math.PI * 2;
-      ped.yaw += Math.max(-2 * dt, Math.min(2 * dt, dy));
+      turnToward(ped, Math.atan2(ped.walkTarget.x - ped.x, ped.walkTarget.z - ped.z), dt);
       ped.x += Math.sin(ped.yaw) * ped.speed * hurry * dt;
       ped.z += Math.cos(ped.yaw) * ped.speed * hurry * dt;
     }

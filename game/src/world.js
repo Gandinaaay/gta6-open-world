@@ -1,9 +1,11 @@
-// The world, rewritten for the v4 recorded pass: builds the renderer, the sky
-// and the day/night cycle, rain, the city, the player, traffic, police, combat
-// and missions, and steps them all in one place. Nothing here knows about menus
-// — main.js owns the screens and calls update(). The game state object G is the
-// one thing every module shares. New in v4: a sunset sun disc that hangs low at
-// dawn and dusk, and a wanted sting the moment a new star lands.
+// The world: builds the renderer, the sky and the day/night cycle, rain, the
+// city, the player, traffic, police, combat and missions, and steps them all
+// in one place. Nothing here knows about menus — main.js owns the screens and
+// calls update(). The game state object G is the one thing every module
+// shares. A sunset sun disc hangs low at dawn and dusk, and a wanted sting
+// sounds the moment a new star lands. Round 2: the scene dressing (lights,
+// beacon, rain, packages) is built by small helpers so createGame reads as
+// a checklist instead of one long block.
 import { WORLD, STEP, DAY_LENGTH, KEYS, districtAt, SUNSET_WINDOW, WANTED_FLASH_TIME } from './config.js';
 import { createRandom } from './random.js';
 import { createAudio } from './audio.js';
@@ -18,18 +20,7 @@ import { createHud, showToast } from './hud.js';
 import { saveGame, loadGame, openShop, openGarage } from './save.js';
 import { sunsetTexture } from './textures.js';
 
-export function createGame(canvas, seed) {
-  const random = createRandom(seed);
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
-  renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-  const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x87b5d6);
-  scene.fog = new THREE.Fog(0x9db8c8, 220, 900);
-  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
-  camera.position.set(0, 6, 140);
-
+function makeLights(scene) {
   const sun = new THREE.DirectionalLight(0xfff2d8, 1.1);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -42,19 +33,72 @@ export function createGame(canvas, seed) {
   scene.add(new THREE.AmbientLight(0x8899aa, 0.55));
   const hemi = new THREE.HemisphereLight(0xbfd8ff, 0x3a4a3a, 0.5);
   scene.add(hemi);
+  return { sun, hemi };
+}
 
+function makeSunDisc(scene) {
   // Sunset sun disc: a glowing billboard that follows the sun's direction and
   // only shows while the sun is low, so dawn and dusk get a real horizon glow.
-  const sunDisc = new THREE.Mesh(
+  const disc = new THREE.Mesh(
     new THREE.PlaneGeometry(120, 120),
     new THREE.MeshBasicMaterial({ map: sunsetTexture(), transparent: true, depthWrite: false, fog: false }),
   );
-  sunDisc.visible = false;
-  scene.add(sunDisc);
+  disc.visible = false;
+  scene.add(disc);
+  return disc;
+}
 
+function makeBeacon(scene) {
+  // Mission marker beacon: a pillar of light over the current objective.
+  const beacon = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.2, 2.2, 60, 12, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }),
+  );
+  beacon.visible = false;
+  scene.add(beacon);
+  return beacon;
+}
+
+function makeRain(scene, count = 900) {
+  // Rain: a cloud of falling streaks, visible only when it rains.
+  const geo = new THREE.BufferGeometry();
+  const pos = new Float32Array(count * 3);
+  for (let i = 0; i < count; i += 1) {
+    pos[i * 3] = (Math.random() - 0.5) * 300;
+    pos[i * 3 + 1] = Math.random() * 60;
+    pos[i * 3 + 2] = (Math.random() - 0.5) * 300;
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  const rain = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0xaaccdd, size: 0.35, transparent: true, opacity: 0.6 }));
+  rain.visible = false;
+  rain.frustumCulled = false;
+  scene.add(rain);
+  return { rain, count };
+}
+
+const PARKED_TYPES = ['sedan', 'sport', 'suv', 'bike', 'taxi', 'truck', 'sedan', 'sport', 'suv', 'sedan', 'bike', 'truck', 'sedan', 'sport'];
+
+export function createGame(canvas, seed) {
+  const random = createRandom(seed);
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87b5d6);
+  scene.fog = new THREE.Fog(0x9db8c8, 220, 900);
+  const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
+  camera.position.set(0, 6, 140);
+
+  const { sun, hemi } = makeLights(scene);
+  const sunDisc = makeSunDisc(scene);
   const city = buildCity(scene, random);
   const audio = createAudio();
   const player = createPlayer(scene);
+  const beacon = makeBeacon(scene);
+  const packageGroup = new THREE.Group();
+  scene.add(packageGroup);
+  const { rain, count: rainCount } = makeRain(scene);
 
   const G = {
     renderer, scene, camera, sun, hemi, random, audio,
@@ -70,6 +114,7 @@ export function createGame(canvas, seed) {
     interactPrompt: '', toast: null, bustedTimer: 0,
     settings: { volume: 0.6, quality: 'high', muted: false },
     time: 0, elapsed: 0,
+    beacon, packageGroup, rain,
   };
   G.addWanted = (n) => {
     const before = G.wanted;
@@ -94,57 +139,23 @@ export function createGame(canvas, seed) {
   };
   G.hudFlash = (m) => showToast(G, m);
 
-  // Mission marker beacon: a pillar of light over the current objective.
-  const beacon = new THREE.Mesh(
-    new THREE.CylinderGeometry(2.2, 2.2, 60, 12, 1, true),
-    new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.35, side: THREE.DoubleSide, depthWrite: false }),
-  );
-  beacon.visible = false;
-  scene.add(beacon);
-  G.beacon = beacon;
-
-  // Collectible package meshes (gold crates) for collect steps and side missions.
-  const packageGroup = new THREE.Group();
-  scene.add(packageGroup);
-  G.packageGroup = packageGroup;
-
-  // Rain: a cloud of falling streaks, visible only when it rains.
-  const rainGeo = new THREE.BufferGeometry();
-  const rainCount = 900;
-  const rainPos = new Float32Array(rainCount * 3);
-  for (let i = 0; i < rainCount; i += 1) {
-    rainPos[i * 3] = (Math.random() - 0.5) * 300;
-    rainPos[i * 3 + 1] = Math.random() * 60;
-    rainPos[i * 3 + 2] = (Math.random() - 0.5) * 300;
-  }
-  rainGeo.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
-  const rain = new THREE.Points(rainGeo, new THREE.PointsMaterial({ color: 0xaaccdd, size: 0.35, transparent: true, opacity: 0.6 }));
-  rain.visible = false;
-  rain.frustumCulled = false;
-  scene.add(rain);
-  G.rain = rain;
-
   G.combat = createCombat(G);
   G.missions = createMissionEngine(G);
   G.hud = createHud(G);
 
   // Parked cars around the city, free for the taking (and the wanted stars).
-  const parkedTypes = ['sedan', 'sport', 'suv', 'bike', 'taxi', 'truck', 'sedan', 'sport', 'suv', 'sedan', 'bike', 'truck', 'sedan', 'sport'];
-  for (let i = 0; i < parkedTypes.length; i += 1) {
+  for (const typeKey of PARKED_TYPES) {
     const line = (Math.floor(random() * 9) - 4) * 100;
     const along = random.range(-450, 450);
     const onX = random() < 0.5;
-    const x = onX ? line + 11 : along;
-    const z = onX ? along : line + 11;
-    const v = spawnVehicle(scene, parkedTypes[i], x, z, onX ? Math.PI / 2 : 0);
+    const v = spawnVehicle(scene, typeKey, onX ? line + 11 : along, onX ? along : line + 11, onX ? Math.PI / 2 : 0);
     G.vehicles.push(v);
   }
   // A taxi and a sport car waiting near the start so mission 1 is quick.
   G.vehicles.push(spawnVehicle(scene, 'taxi', 12, 108, Math.PI / 2));
   G.vehicles.push(spawnVehicle(scene, 'sport', -14, 96, 0));
 
-  const trafficCount = 16;
-  for (let i = 0; i < trafficCount; i += 1) spawnTrafficCar(G, random);
+  for (let i = 0; i < 16; i += 1) spawnTrafficCar(G, random);
   for (let i = 0; i < 24; i += 1) spawnPedestrian(G, random);
   spawnPatrol(G, random);
   spawnPatrol(G, random);
@@ -195,26 +206,32 @@ export function createGame(canvas, seed) {
     const el = document.getElementById('choice');
     el.classList.add('show');
     G.screen = 'choice';
-    document.getElementById('choice-spare').onclick = () => {
+    const finish = (spared) => {
       el.classList.remove('show');
       G.screen = 'play';
-      G.showBriefing('The Merciful Ending', 'You spared Kane and turned the ledger over. Vice Bay gets a second chance — and so do you.');
+      if (spared) {
+        G.showBriefing('The Merciful Ending', 'You spared Kane and turned the ledger over. Vice Bay gets a second chance — and so do you.');
+      } else {
+        G.money += 20000;
+        G.showBriefing('The King of Vice Bay', 'You took the city. Kane is gone, the streets are yours, and Vice Bay bows to its new king.');
+      }
       G.missions.missionIndex = 10;
       G.missions.active = false;
       G.missions.choiceOpen = false;
       G.missions.completeMission();
     };
-    document.getElementById('choice-take').onclick = () => {
-      el.classList.remove('show');
-      G.screen = 'play';
-      G.money += 20000;
-      G.showBriefing('The King of Vice Bay', 'You took the city. Kane is gone, the streets are yours, and Vice Bay bows to its new king.');
-      G.missions.missionIndex = 10;
-      G.missions.active = false;
-      G.missions.choiceOpen = false;
-      G.missions.completeMission();
-    };
+    document.getElementById('choice-spare').onclick = () => finish(true);
+    document.getElementById('choice-take').onclick = () => finish(false);
   };
+
+  function respawnAtHospital(G, fine, lost, title, line) {
+    if (G.currentVehicle) exitVehicle(G);
+    G.player.x = 140;
+    G.player.z = 60;
+    G.player.health = 100;
+    G.screen = title.toLowerCase();
+    G.showBriefing(title, line);
+  }
 
   G.busted = () => {
     if (G.screen !== 'play') return;
@@ -222,24 +239,14 @@ export function createGame(canvas, seed) {
     G.money -= fine;
     G.wanted = 0;
     G.police.length = 0;
-    if (G.currentVehicle) exitVehicle(G);
-    G.player.x = 140;
-    G.player.z = 60;
-    G.player.health = 100;
-    G.screen = 'busted';
-    G.showBriefing('BUSTED', 'The VBPD caught you. You paid $' + fine + ' in fines and woke up outside Bay General Hospital.');
+    respawnAtHospital(G, fine, 0, 'BUSTED', 'The VBPD caught you. You paid $' + fine + ' in fines and woke up outside Bay General Hospital.');
   };
   G.wasted = (cause) => {
     if (G.screen !== 'play') return;
     const lost = Math.min(G.money, 500);
     G.money -= lost;
     G.wanted = 0;
-    if (G.currentVehicle) exitVehicle(G);
-    G.player.x = 140;
-    G.player.z = 60;
-    G.player.health = 100;
-    G.screen = 'wasted';
-    G.showBriefing('WASTED', 'You were ' + (cause || 'taken down') + '. You lost $' + lost + ' and woke up at Bay General Hospital.');
+    respawnAtHospital(G, 0, lost, 'WASTED', 'You were ' + (cause || 'taken down') + '. You lost $' + lost + ' and woke up at Bay General Hospital.');
   };
   G.onVehicleCrash = () => {
     if (G.currentVehicle && G.currentVehicle.health <= 0) {
@@ -257,7 +264,8 @@ export function createGame(canvas, seed) {
     sun.position.set(Math.cos(angle) * 300, Math.max(20, elev * 300), 180);
     sun.intensity = 0.25 + day * 0.9;
     sun.color.setHex(elev > 0.25 ? 0xfff2d8 : 0xff9a5c);
-    scene.background.setHex(elev > 0.15 ? 0x87b5d6 : elev > -0.1 ? 0xe88a4a : 0x0b1026);
+    const sky = elev > 0.15 ? 0x87b5d6 : elev > -0.1 ? 0xe88a4a : 0x0b1026;
+    scene.background.setHex(sky);
     scene.fog.color.copy(scene.background);
     hemi.intensity = 0.25 + day * 0.35;
     const lampOn = elev < 0.05;
@@ -267,9 +275,7 @@ export function createGame(canvas, seed) {
     const inWindow = (t >= SUNSET_WINDOW.from && t <= SUNSET_WINDOW.to) || (t >= 0.48 && t <= 0.56);
     sunDisc.visible = inWindow;
     if (inWindow) {
-      const fx = G.player.x + Math.cos(angle) * 420;
-      const fz = G.player.z + 180;
-      sunDisc.position.set(fx, 55 + elev * 40, fz);
+      sunDisc.position.set(G.player.x + Math.cos(angle) * 420, 55 + elev * 40, G.player.z + 180);
       sunDisc.lookAt(camera.position);
       // Brighter at dawn, softer at dusk — the disc never outshines the city.
       sunDisc.material.opacity = t < 0.25 ? 0.95 : 0.8;
@@ -286,14 +292,13 @@ export function createGame(canvas, seed) {
     }
     if (G.weather === 'rain') {
       const pos = G.rain.geometry.attributes.position;
-      const cx = G.currentVehicle ? G.currentVehicle.x : G.player.x;
-      const cz = G.currentVehicle ? G.currentVehicle.z : G.player.z;
+      const focus = G.currentVehicle || G.player;
       for (let i = 0; i < rainCount; i += 1) {
         let y = pos.getY(i) - dt * 55;
         if (y < 0) y = 60;
         pos.setY(i, y);
-        pos.setX(i, cx + ((i * 37) % 300) - 150);
-        pos.setZ(i, cz + ((i * 53) % 300) - 150);
+        pos.setX(i, focus.x + ((i * 37) % 300) - 150);
+        pos.setZ(i, focus.z + ((i * 53) % 300) - 150);
       }
       pos.needsUpdate = true;
     }
@@ -313,6 +318,31 @@ export function createGame(canvas, seed) {
     }
     if (G.missions.sideState && G.missions.sideState.packages) {
       for (const p of G.missions.sideState.packages) if (!p.taken) draw(p.x, p.z);
+    }
+  }
+
+  function updateBeacon() {
+    // Mission beacon over the current objective.
+    const target = G.missionTarget || G.sideTarget;
+    if (target) {
+      beacon.visible = true;
+      beacon.position.set(target.x, 30, target.z);
+      beacon.material.opacity = 0.25 + Math.sin(G.time * 4) * 0.1;
+    } else {
+      beacon.visible = false;
+    }
+  }
+
+  function updatePrompt() {
+    if (!G.currentVehicle) {
+      const shop = G.nearestShop();
+      const side = G.nearestSideMarker();
+      if (shop) G.interactPrompt = '[E] Enter ' + shop.name;
+      else if (side && !G.missions.side) G.interactPrompt = '[E] Start side mission: ' + side.name;
+      else if (nearestVehicle(G)) G.interactPrompt = '[F] Steal / enter ' + nearestVehicle(G).type.name;
+      else G.interactPrompt = '';
+    } else {
+      G.interactPrompt = '[F] Exit vehicle · [Space] Handbrake · [H] Horn';
     }
   }
 
@@ -347,30 +377,11 @@ export function createGame(canvas, seed) {
     G.missions.update(dt);
     G.missions.updateSide(dt);
     updatePackages();
+    updateBeacon();
+    updatePrompt();
 
-    // Mission beacon over the current objective.
-    const target = G.missionTarget || G.sideTarget;
-    if (target) {
-      beacon.visible = true;
-      beacon.position.set(target.x, 30, target.z);
-      beacon.material.opacity = 0.25 + Math.sin(G.time * 4) * 0.1;
-    } else {
-      beacon.visible = false;
-    }
-
-    // Interaction prompt.
-    if (!G.currentVehicle) {
-      const shop = G.nearestShop();
-      const side = G.nearestSideMarker();
-      if (shop) G.interactPrompt = '[E] Enter ' + shop.name;
-      else if (side && !G.missions.side) G.interactPrompt = '[E] Start side mission: ' + side.name;
-      else if (nearestVehicle(G)) G.interactPrompt = '[F] Steal / enter ' + nearestVehicle(G).type.name;
-      else G.interactPrompt = '';
-    } else {
-      G.interactPrompt = '[F] Exit vehicle · [Space] Handbrake · [H] Horn';
-    }
-
-    G.currentDistrict = districtAt(G.currentVehicle ? G.currentVehicle.x : G.player.x, G.currentVehicle ? G.currentVehicle.z : G.player.z);
+    const focus = G.currentVehicle || G.player;
+    G.currentDistrict = districtAt(focus.x, focus.z);
     G.hud.update();
     // Keep the sun's shadow box centred on the player so shadows stay crisp.
     sun.target.position.set(G.player.x, 0, G.player.z);

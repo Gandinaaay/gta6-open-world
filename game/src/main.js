@@ -1,14 +1,14 @@
-// Boot and the one loop, rewritten for the v4 recorded pass: input is read
-// every frame, the world advances in fixed 1/60 s steps, and the renderer paints
-// what is there. The game moves between screens — title, play, paused, shop,
-// missions, choice, busted and wasted — all as DOM panels over the same live 3D
-// city.
+// Boot and the one loop: input is read every frame, the world advances in
+// fixed 1/60 s steps, and the renderer paints what is there. The game moves
+// between screens — title, play, paused, shop, missions, choice, busted and
+// wasted — all as DOM panels over the same live 3D city.
 //
-// ?seed=N fixes the city and traffic. ?shot=start|play|chase|night (with &seed=N)
-// stages that scene instead of running the loop, paints it a few times and sets
-// window.__shotReady for a screenshot. New in v4: the title camera drifts
-// slowly around the hero, so the menu sits over a living city instead of a
-// frozen frame.
+// ?seed=N fixes the city and traffic. ?shot=start|play|chase|night (with
+// &seed=N) stages that scene instead of running the loop, paints it a few
+// times and sets window.__shotReady for a screenshot. The title camera
+// drifts slowly around the hero, so the menu sits over a living city instead
+// of a frozen frame. Round 2: screens are one table, and the frame loop is
+// split into an action step and a simulation step.
 import { STEP } from './config.js';
 import { createRandom } from './random.js';
 import { createGame } from './world.js';
@@ -38,15 +38,20 @@ window.__game = G; // debug hook: lets a test driver inspect the live game state
 const input = createInput(G);
 const hudRoot = document.getElementById('hud');
 
+const PANEL_IDS = ['menu', 'pause', 'missions', 'shop', 'choice'];
+
+function showPanel(id, on) {
+  document.getElementById(id).classList.toggle('show', on);
+}
+
 function showScreen(name) {
   G.screen = name;
-  for (const id of ['menu', 'pause', 'missions', 'shop', 'choice']) {
-    document.getElementById(id).classList.toggle('show', id === name || (name === 'missions' && id === 'missions'));
-  }
+  showPanel('menu', name === 'title');
+  showPanel('pause', name === 'paused');
+  showPanel('missions', name === 'missions');
+  showPanel('shop', name === 'shop');
+  showPanel('choice', name === 'choice');
   hudRoot.style.display = name === 'title' ? 'none' : '';
-  document.getElementById('menu').classList.toggle('show', name === 'title');
-  document.getElementById('pause').classList.toggle('show', name === 'paused');
-  document.getElementById('missions').classList.toggle('show', name === 'missions');
   if (name === 'title') {
     document.getElementById('continue-btn').style.display = G.hadSave ? '' : 'none';
     document.getElementById('save-note').textContent = G.hadSave
@@ -80,38 +85,44 @@ function continueGame() {
   G.showBriefing('Welcome back', 'Vice Bay missed you. Press M to continue the story.');
 }
 
+function buildMissionList() {
+  const list = document.getElementById('mission-list');
+  list.innerHTML = '';
+  MISSIONS.forEach((m, i) => {
+    const done = i < G.missions.missionIndex;
+    const next = i === G.missions.missionIndex;
+    const row = document.createElement('div');
+    row.className = 'shop-row';
+    const label = document.createElement('span');
+    label.textContent = (i + 1) + '. ' + m.title + ' — $' + m.reward + ' · ' + (done ? 'DONE' : next ? 'NEXT' : 'LOCKED');
+    const btn = document.createElement('button');
+    btn.textContent = next ? 'START' : done ? 'REPLAY' : '—';
+    btn.disabled = !done && !next;
+    btn.onclick = () => {
+      G.missions.startMission(i);
+      showScreen('play');
+    };
+    row.appendChild(label);
+    row.appendChild(btn);
+    list.appendChild(row);
+  });
+  const sideTitle = document.createElement('div');
+  sideTitle.className = 'panel-sub';
+  sideTitle.textContent = 'Side missions — walk to their marker in the city and press E:';
+  list.appendChild(sideTitle);
+  for (const s of SIDE_MISSIONS) {
+    const row = document.createElement('div');
+    row.className = 'shop-row';
+    const label = document.createElement('span');
+    label.textContent = s.name + ' — ' + s.desc + ' ($' + s.reward + ')';
+    row.appendChild(label);
+    list.appendChild(row);
+  }
+}
+
 G.toggleMissionMenu = () => {
   if (G.screen === 'play') {
-    const list = document.getElementById('mission-list');
-    list.innerHTML = '';
-    MISSIONS.forEach((m, i) => {
-      const row = document.createElement('div');
-      row.className = 'shop-row';
-      const label = document.createElement('span');
-      label.textContent = (i + 1) + '. ' + m.title + ' — $' + m.reward + ' · ' + (i < G.missions.missionIndex ? 'DONE' : i === G.missions.missionIndex ? 'NEXT' : 'LOCKED');
-      const btn = document.createElement('button');
-      btn.textContent = i === G.missions.missionIndex ? 'START' : i < G.missions.missionIndex ? 'REPLAY' : '—';
-      btn.disabled = i > G.missions.missionIndex;
-      btn.onclick = () => {
-        G.missions.startMission(i);
-        showScreen('play');
-      };
-      row.appendChild(label);
-      row.appendChild(btn);
-      list.appendChild(row);
-    });
-    const sideTitle = document.createElement('div');
-    sideTitle.className = 'panel-sub';
-    sideTitle.textContent = 'Side missions — walk to their marker in the city and press E:';
-    list.appendChild(sideTitle);
-    for (const s of SIDE_MISSIONS) {
-      const row = document.createElement('div');
-      row.className = 'shop-row';
-      const label = document.createElement('span');
-      label.textContent = s.name + ' — ' + s.desc + ' ($' + s.reward + ')';
-      row.appendChild(label);
-      list.appendChild(row);
-    }
+    buildMissionList();
     showScreen('missions');
   } else if (G.screen === 'missions') {
     showScreen('play');
@@ -164,8 +175,7 @@ function runGame() {
     const actions = input.takeActions();
     if (actions & ACTION_PAUSE) {
       if (G.screen === 'play') showScreen('paused');
-      else if (G.screen === 'paused') showScreen('play');
-      else if (G.screen === 'missions') showScreen('play');
+      else if (G.screen === 'paused' || G.screen === 'missions') showScreen('play');
       return;
     }
     if (G.screen === 'title') {
@@ -189,19 +199,23 @@ function runGame() {
     if (actions & ACTION_HORN && G.currentVehicle && G.audio) G.audio.horn();
   }
 
+  function stepSimulation() {
+    while (accumulator >= STEP) {
+      if (G.mouseFire) G.combat.fire();
+      G.update(STEP);
+      accumulator -= STEP;
+    }
+    saveTimer += 1 / 60;
+    if (saveTimer > 20) { saveTimer = 0; G.saveGame(); }
+  }
+
   function frame(now) {
     requestAnimationFrame(frame);
     accumulator += Math.min((now - last) / 1000, MAX_FRAME);
     last = now;
     handleActions();
     if (G.screen === 'play') {
-      while (accumulator >= STEP) {
-        if (G.mouseFire) G.combat.fire();
-        G.update(STEP);
-        accumulator -= STEP;
-      }
-      saveTimer += 1 / 60;
-      if (saveTimer > 20) { saveTimer = 0; G.saveGame(); }
+      stepSimulation();
     } else {
       accumulator = 0;
       // The title screen still shows the living city behind the menu, and the

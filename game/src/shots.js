@@ -1,11 +1,12 @@
-// The screenshot scenes behind ?shot=start|play|chase|night, rewritten for the
-// v4 recorded pass. Each one stages a real moment of the game — the same world,
-// the same rules, driven forward a few seconds by a scripted driver — so the
-// frame is what playing really looks like and the same seed always gives the
-// same frame. The briefing panel is hidden for the shot so the city, the car
-// and the HUD fill the frame. New in v4: the start shot gets a slight camera
-// angle so the dawn sun disc sits beside the hero, and the chase shot flashes
-// the wanted stars for the frame.
+// The screenshot scenes behind ?shot=start|play|chase|night. Each one stages
+// a real moment of the game — the same world, the same rules, driven forward
+// a few seconds by a scripted driver — so the frame is what playing really
+// looks like and the same seed always gives the same frame. The briefing
+// panel is hidden for the shot so the city, the car and the HUD fill the
+// frame. The start shot gets a slight camera angle so the dawn sun disc sits
+// beside the hero, and the chase shot flashes the wanted stars for the frame.
+// Round 2: each scene is one function in a table, sharing two small drivers
+// (walkFor / driveFor) and one car-grabber.
 import { STEP } from './config.js';
 import { enterVehicle } from './vehicles.js';
 
@@ -14,20 +15,21 @@ function hideBriefing() {
   if (el) el.classList.remove('show');
 }
 
-function driveFor(G, seconds, steer = 0) {
-  G.keys.KeyW = true;
-  if (steer < 0) G.keys.KeyA = true;
-  if (steer > 0) G.keys.KeyD = true;
+function holdKeys(G, seconds, keys) {
+  for (const k of keys) G.keys[k] = true;
   for (let i = 0; i < seconds / STEP; i += 1) G.update(STEP);
-  G.keys.KeyW = false;
-  G.keys.KeyA = false;
-  G.keys.KeyD = false;
+  for (const k of keys) G.keys[k] = false;
+}
+
+function driveFor(G, seconds, steer = 0) {
+  const keys = ['KeyW'];
+  if (steer < 0) keys.push('KeyA');
+  if (steer > 0) keys.push('KeyD');
+  holdKeys(G, seconds, keys);
 }
 
 function walkFor(G, seconds) {
-  G.keys.KeyW = true;
-  for (let i = 0; i < seconds / STEP; i += 1) G.update(STEP);
-  G.keys.KeyW = false;
+  holdKeys(G, seconds, ['KeyW']);
 }
 
 function takeCar(G, x, z, yaw) {
@@ -40,14 +42,18 @@ function takeCar(G, x, z, yaw) {
   return car;
 }
 
-export function stageShot(name, G) {
+function baseState(G) {
   G.screen = 'play';
   G.player.health = 100;
   G.money = 12500;
   G.rep = 85;
-  if (name === 'start') {
-    // Dawn over Downtown: the hero on foot, the city waking up behind the title,
-    // the sunset sun disc glowing low on the horizon beside him.
+}
+
+const SCENES = {
+  // Dawn over Downtown: the hero on foot, the city waking up behind the title,
+  // the sunset sun disc glowing low on the horizon beside him.
+  start(G) {
+    baseState(G);
     G.dayTime = 0.05;
     G.weather = 'clear';
     G.player.x = 0;
@@ -60,10 +66,12 @@ export function stageShot(name, G) {
     hideBriefing();
     G.screen = 'title';
     return 'title';
-  }
-  if (name === 'chase') {
-    // Night in Downtown: 3 wanted stars, VBPD interceptors on your tail, the
-    // mission marker glowing ahead and the minimap full of blue dots.
+  },
+
+  // Night in Downtown: 3 wanted stars, VBPD interceptors on your tail, the
+  // mission marker glowing ahead and the minimap full of blue dots.
+  chase(G) {
+    baseState(G);
     G.dayTime = 0.97;
     G.weather = 'clear';
     takeCar(G, 0, -100, 0);
@@ -74,31 +82,31 @@ export function stageShot(name, G) {
     driveFor(G, 4, 0);
     // Reset the ram damage for the frame, then pull the pursuit cars into view
     // ahead of the player, flanking the road, so the chase reads at a glance.
-    G.currentVehicle.health = 88;
-    const px = G.currentVehicle.x;
-    const pz = G.currentVehicle.z;
-    const yaw = G.currentVehicle.yaw;
-    const fx = -Math.sin(yaw);
-    const fz = -Math.cos(yaw);
+    const car = G.currentVehicle;
+    car.health = 88;
+    const fx = -Math.sin(car.yaw);
+    const fz = -Math.cos(car.yaw);
     const spots = [[16, -7], [20, 7], [27, 0], [33, -7]];
     for (let i = 0; i < spots.length && i < G.police.length; i += 1) {
       const cop = G.police[i];
-      cop.x = px + fx * spots[i][0] - fz * spots[i][1];
-      cop.z = pz + fz * spots[i][0] + fx * spots[i][1];
-      cop.yaw = yaw;
+      cop.x = car.x + fx * spots[i][0] - fz * spots[i][1];
+      cop.z = car.z + fz * spots[i][0] + fx * spots[i][1];
+      cop.yaw = car.yaw;
       cop.speed = 40;
       cop.group.position.set(cop.x, 0, cop.z);
-      cop.group.rotation.y = yaw;
+      cop.group.rotation.y = car.yaw;
     }
-    for (let i = 0; i < 0.4 / STEP; i += 1) G.update(STEP);
-    G.currentVehicle.health = 88;
+    holdKeys(G, 0.4, []);
+    car.health = 88;
     G.crimeFlash = 2;
     hideBriefing();
     return 'play';
-  }
-  if (name === 'night') {
-    // Night Run: the illegal beach race at Ocean Beach, rain on the road, the
-    // race checkpoints and the neon club glowing behind you.
+  },
+
+  // Night Run: the illegal beach race at Ocean Beach, rain on the road, the
+  // race checkpoints and the neon club glowing behind you.
+  night(G) {
+    baseState(G);
     G.dayTime = 0.94;
     G.weather = 'rain';
     takeCar(G, 400, -40, 0);
@@ -108,16 +116,25 @@ export function stageShot(name, G) {
     driveFor(G, 2.5, 0);
     hideBriefing();
     return 'play';
-  }
-  // play: midday Downtown, driving the Comet GT through live traffic with a
+  },
+
+  // Midday Downtown, driving the Comet GT through live traffic with a
   // mission objective on the HUD and the minimap.
-  G.dayTime = 0.35;
-  G.weather = 'clear';
-  takeCar(G, 0, 150, Math.PI);
-  G.wanted = 0;
-  G.missions.missionIndex = 0;
-  G.missions.startMission(0);
-  driveFor(G, 3, 0);
-  hideBriefing();
-  return 'play';
+  play(G) {
+    baseState(G);
+    G.dayTime = 0.35;
+    G.weather = 'clear';
+    takeCar(G, 0, 150, Math.PI);
+    G.wanted = 0;
+    G.missions.missionIndex = 0;
+    G.missions.startMission(0);
+    driveFor(G, 3, 0);
+    hideBriefing();
+    return 'play';
+  },
+};
+
+export function stageShot(name, G) {
+  const scene = SCENES[name] || SCENES.play;
+  return scene(G);
 }

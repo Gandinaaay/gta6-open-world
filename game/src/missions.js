@@ -1,121 +1,93 @@
-// The story, rewritten for the v4 recorded pass: 10 linked main missions in
-// "Blood & Destiny", each a list of steps the engine plays (go to, drive to,
-// deliver, kill, escape, race, collect, talk, choice), plus 8 working side
-// missions you start at markers around the city. Step types:
+// The story: 10 linked main missions in "Blood & Destiny", each a list of
+// steps the engine plays (go to, drive to, deliver, kill, escape, race,
+// collect, talk, choice), plus 8 working side missions you start at markers
+// around the city. Step types:
 // goto | drive | deliver | kill | collect | escape | race | talk | choice.
 // Every step carries its own marker, radius and reward; the engine advances
 // them, and the HUD shows the current step text plus a live distance to the
-// marker. New in v4: finishing a story mission also tops up 20 pistol rounds,
-// so the next fight never starts dry.
+// marker. Finishing a story mission also tops up 20 pistol rounds, so the
+// next fight never starts dry. Round 2: the mission tables are plain rows
+// (a step is [type, place, text, extra]) that one builder turns into the
+// objects the engine runs, so the story reads like a script.
 import { PLACES } from './city.js';
 import { spawnEnemy, clearEnemies } from './combat.js';
 import { spawnVehicle } from './vehicles.js';
 
-export const MISSIONS = [
-  {
-    id: 1, title: 'Welcome to Vice Bay',
-    briefing: 'You are back after years away. Rico waits at his apartment. Find a car and meet him.',
-    reward: 500, rep: 10,
-    steps: [
-      { type: 'goto', place: 'start', text: 'Go to Rico\'s apartment' },
-      { type: 'drive', place: 'friendHouse', text: 'Get a car and drive to Marco\'s place' },
-    ],
-  },
-  {
-    id: 2, title: 'A Dangerous Favor',
-    briefing: 'Marco needs a package delivered to the market — no questions, no stops.',
-    reward: 800, rep: 15,
-    steps: [
-      { type: 'goto', place: 'friendHouse', text: 'Pick up the package from Marco' },
-      { type: 'deliver', place: 'market', text: 'Deliver the package to Havana Market' },
-    ],
-  },
-  {
-    id: 3, title: 'Street Reputation',
-    briefing: 'The Vipers think they own the Criminal District. Show them who runs these streets.',
-    reward: 1200, rep: 25,
-    steps: [
-      { type: 'goto', place: 'gangHQ', text: 'Go to the Vipers hideout' },
-      { type: 'kill', place: 'gangHQ', count: 4, text: 'Take down 4 Vipers gangsters' },
-    ],
-  },
-  {
-    id: 4, title: 'The Getaway',
-    briefing: 'The deal went loud and the VBPD is on you. Lose the police, then lay low at the club.',
-    reward: 1500, rep: 20,
-    steps: [
-      { type: 'escape', wanted: 3, seconds: 20, text: 'Escape the police pursuit (stay out of sight)' },
-      { type: 'goto', place: 'club', text: 'Lay low at the Neon Tide Club' },
-    ],
-  },
-  {
-    id: 5, title: 'The Missing Deal',
-    briefing: 'A shipment vanished at the port. Search Warehouse 7 and find out who took it.',
-    reward: 2000, rep: 25,
-    steps: [
-      { type: 'goto', place: 'portDeal', text: 'Search Warehouse 7 at the port' },
-      { type: 'kill', place: 'portDeal', count: 3, text: 'Deal with the thieves at the port' },
-      { type: 'collect', place: 'portDeal', count: 3, text: 'Recover 3 stolen crates' },
-    ],
-  },
-  {
-    id: 6, title: 'Betrayal',
-    briefing: 'Marco sold you out. He is hiding at the airport with Kane\'s men. End it.',
-    reward: 2500, rep: 30,
-    steps: [
-      { type: 'goto', place: 'airport', text: 'Confront Marco at the airport' },
-      { type: 'kill', place: 'airport', count: 5, text: 'Fight Kane\'s men and Marco' },
-    ],
-  },
-  {
-    id: 7, title: 'Night Run',
-    briefing: 'Illegal street race along the beach. Beat the rival drivers to the finish.',
-    reward: 3000, rep: 30,
-    steps: [
-      { type: 'race', place: 'raceStart', text: 'Win the beach street race' },
-    ],
-  },
-  {
-    id: 8, title: 'The Hidden Truth',
-    briefing: 'City Hall is in Kane\'s pocket. Steal the ledger that proves it.',
-    reward: 3500, rep: 35,
-    steps: [
-      { type: 'goto', place: 'cityHall', text: 'Sneak into City Hall' },
-      { type: 'collect', place: 'cityHall', count: 2, text: 'Grab the ledger pages (2)' },
-      { type: 'escape', wanted: 2, seconds: 15, text: 'Escape with the evidence' },
-    ],
-  },
-  {
-    id: 9, title: 'Final Assault',
-    briefing: 'Kane\'s mansion in Rich Hills. His whole crew is there. Bring the war to him.',
-    reward: 5000, rep: 50,
-    steps: [
-      { type: 'goto', place: 'mansion', text: 'Storm Kane\'s mansion' },
-      { type: 'kill', place: 'mansion', count: 8, text: 'Defeat Kane\'s crew (8)' },
-    ],
-  },
-  {
-    id: 10, title: 'Blood & Destiny',
-    briefing: 'Kane himself, at the bank. Your choice decides the fate of Vice Bay.',
-    reward: 10000, rep: 100,
-    steps: [
-      { type: 'goto', place: 'bank', text: 'Face Kane at Bay National Bank' },
-      { type: 'kill', place: 'bank', count: 6, text: 'Defeat Kane\'s last guards (6)' },
-      { type: 'choice', text: 'Choose Vice Bay\'s fate: spare Kane or take the city' },
-    ],
-  },
+// Rows: [id, title, briefing, reward, rep, steps], a step is
+// [type, place, text] or [type, place, text, count/wanted].
+const MISSION_ROWS = [
+  [1, 'Welcome to Vice Bay', 'You are back after years away. Rico waits at his apartment. Find a car and meet him.', 500, 10, [
+    ['goto', 'start', 'Go to Rico\'s apartment'],
+    ['drive', 'friendHouse', 'Get a car and drive to Marco\'s place'],
+  ]],
+  [2, 'A Dangerous Favor', 'Marco needs a package delivered to the market — no questions, no stops.', 800, 15, [
+    ['goto', 'friendHouse', 'Pick up the package from Marco'],
+    ['deliver', 'market', 'Deliver the package to Havana Market'],
+  ]],
+  [3, 'Street Reputation', 'The Vipers think they own the Criminal District. Show them who runs these streets.', 1200, 25, [
+    ['goto', 'gangHQ', 'Go to the Vipers hideout'],
+    ['kill', 'gangHQ', 'Take down 4 Vipers gangsters', 4],
+  ]],
+  [4, 'The Getaway', 'The deal went loud and the VBPD is on you. Lose the police, then lay low at the club.', 1500, 20, [
+    ['escape', null, 'Escape the police pursuit (stay out of sight)', 3],
+    ['goto', 'club', 'Lay low at the Neon Tide Club'],
+  ]],
+  [5, 'The Missing Deal', 'A shipment vanished at the port. Search Warehouse 7 and find out who took it.', 2000, 25, [
+    ['goto', 'portDeal', 'Search Warehouse 7 at the port'],
+    ['kill', 'portDeal', 'Deal with the thieves at the port', 3],
+    ['collect', 'portDeal', 'Recover 3 stolen crates', 3],
+  ]],
+  [6, 'Betrayal', 'Marco sold you out. He is hiding at the airport with Kane\'s men. End it.', 2500, 30, [
+    ['goto', 'airport', 'Confront Marco at the airport'],
+    ['kill', 'airport', 'Fight Kane\'s men and Marco', 5],
+  ]],
+  [7, 'Night Run', 'Illegal street race along the beach. Beat the rival drivers to the finish.', 3000, 30, [
+    ['race', 'raceStart', 'Win the beach street race'],
+  ]],
+  [8, 'The Hidden Truth', 'City Hall is in Kane\'s pocket. Steal the ledger that proves it.', 3500, 35, [
+    ['goto', 'cityHall', 'Sneak into City Hall'],
+    ['collect', 'cityHall', 'Grab the ledger pages (2)', 2],
+    ['escape', null, 'Escape with the evidence', 2],
+  ]],
+  [9, 'Final Assault', 'Kane\'s mansion in Rich Hills. His whole crew is there. Bring the war to him.', 5000, 50, [
+    ['goto', 'mansion', 'Storm Kane\'s mansion'],
+    ['kill', 'mansion', 'Defeat Kane\'s crew (8)', 8],
+  ]],
+  [10, 'Blood & Destiny', 'Kane himself, at the bank. Your choice decides the fate of Vice Bay.', 10000, 100, [
+    ['goto', 'bank', 'Face Kane at Bay National Bank'],
+    ['kill', 'bank', 'Defeat Kane\'s last guards (6)', 6],
+    ['choice', null, 'Choose Vice Bay\'s fate: spare Kane or take the city'],
+  ]],
 ];
 
-export const SIDE_MISSIONS = [
-  { id: 'taxi', name: 'Taxi Driver', desc: 'Pick up fares and drive them across town.', place: 'start', reward: 400 },
-  { id: 'race', name: 'Street Racing', desc: 'Checkpoint race through Downtown.', place: 'raceStart', reward: 900 },
-  { id: 'delivery', name: 'Vehicle Delivery', desc: 'Deliver a car to three stops.', place: 'portDeal', reward: 700 },
-  { id: 'escape', name: 'Police Escape', desc: 'Get 3 stars and lose the police.', place: 'criminal', reward: 800 },
-  { id: 'packages', name: 'Hidden Packages', desc: 'Collect 8 packages hidden around the city.', place: 'beach', reward: 1500 },
-  { id: 'territory', name: 'Gang Territory', desc: 'Clear the Vipers from their turf.', place: 'gangHQ', reward: 1000 },
-  { id: 'timetrial', name: 'Time Trial', desc: 'Hit 5 checkpoints before the clock runs out.', place: 'airport', reward: 600 },
-  { id: 'rescue', name: 'Rescue Civilians', desc: 'Pick up a hurt civilian and drive them to the hospital.', place: 'hospital', reward: 750 },
+function buildStep(row) {
+  const [type, place, text, extra] = row;
+  const step = { type, place, text };
+  if (type === 'kill' || type === 'collect') step.count = extra;
+  if (type === 'escape') step.wanted = extra;
+  return step;
+}
+
+export const MISSIONS = MISSION_ROWS.map(([id, title, briefing, reward, rep, steps]) => ({
+  id, title, briefing, reward, rep,
+  steps: steps.map(buildStep),
+}));
+
+// Rows: [id, display name, description, marker place, reward].
+const SIDE_ROWS = [
+  ['taxi', 'Taxi Driver', 'Pick up fares and drive them across town.', 'start', 400],
+  ['race', 'Street Racing', 'Checkpoint race through Downtown.', 'raceStart', 900],
+  ['delivery', 'Vehicle Delivery', 'Deliver a car to three stops.', 'portDeal', 700],
+  ['escape', 'Police Escape', 'Get 3 stars and lose the police.', 'criminal', 800],
+  ['packages', 'Hidden Packages', 'Collect 8 packages hidden around the city.', 'beach', 1500],
+  ['territory', 'Gang Territory', 'Clear the Vipers from their turf.', 'gangHQ', 1000],
+  ['timetrial', 'Time Trial', 'Hit 5 checkpoints before the clock runs out.', 'airport', 600],
+  ['rescue', 'Rescue Civilians', 'Pick up a hurt civilian and drive them to the hospital.', 'hospital', 750],
 ];
+
+export const SIDE_MISSIONS = SIDE_ROWS.map(([id, name, desc, place, reward]) => ({
+  id, name, desc, place, reward,
+}));
 
 // The Night Run route: a loop from the beach, through the hills, around
 // Downtown and back to the club. Side races reuse the first five points.
@@ -124,6 +96,10 @@ const RACE_POINTS = [
   { x: -100, z: -400 }, { x: -300, z: -200 }, { x: -400, z: 0 },
   { x: -200, z: 200 }, { x: 0, z: 300 }, { x: 300, z: 300 }, { x: 420, z: 120 },
 ];
+
+function playerFocus(G) {
+  return G.currentVehicle || G.player;
+}
 
 export function createMissionEngine(G) {
   const engine = {
@@ -140,6 +116,7 @@ export function createMissionEngine(G) {
       const m = engine.current();
       return m ? m.steps[engine.stepIndex] : null;
     },
+
     startMission(index) {
       engine.missionIndex = index;
       engine.stepIndex = 0;
@@ -151,6 +128,7 @@ export function createMissionEngine(G) {
       G.showBriefing(m.title, m.briefing);
       if (G.audio) G.audio.pickup();
     },
+
     setupStep() {
       const step = engine.currentStep();
       engine.stepState = { kills: 0, collected: 0, timer: 0, raceIndex: 0, spawned: false, collectibles: [] };
@@ -177,23 +155,25 @@ export function createMissionEngine(G) {
       }
       engine.updateMarker();
     },
+
     stepTarget() {
       const step = engine.currentStep();
       if (!step) return null;
       if (step.type === 'race') return RACE_POINTS[engine.stepState.raceIndex] || null;
       if (step.type === 'collect' && engine.stepState.collectibles.length) {
-        const next = engine.stepState.collectibles.find((c) => !c.taken);
-        return next || null;
+        return engine.stepState.collectibles.find((c) => !c.taken) || null;
       }
       if (step.place) return PLACES[step.place];
       return null;
     },
+
     updateMarker() {
       const target = engine.stepTarget();
       G.missionTarget = target;
       const step = engine.currentStep();
       G.missionText = step ? step.text : (engine.active ? 'Mission complete' : 'Free roam — press M for missions');
     },
+
     advanceStep() {
       engine.stepIndex += 1;
       const m = engine.current();
@@ -205,6 +185,7 @@ export function createMissionEngine(G) {
       engine.setupStep();
       if (G.audio) G.audio.pickup();
     },
+
     completeMission() {
       const m = engine.current();
       G.money += m.reward;
@@ -225,6 +206,7 @@ export function createMissionEngine(G) {
       }
       G.saveGame();
     },
+
     failMission(reason) {
       const m = engine.current();
       G.toast('Mission failed: ' + reason);
@@ -234,28 +216,28 @@ export function createMissionEngine(G) {
       G.missionTarget = null;
       G.missionText = 'Mission failed — press M to retry: ' + (m ? m.title : '');
     },
-    update(dt) {
-      if (!engine.active) return;
-      const step = engine.currentStep();
-      if (!step) return;
-      const st = engine.stepState;
-      const px = G.currentVehicle ? G.currentVehicle.x : G.player.x;
-      const pz = G.currentVehicle ? G.currentVehicle.z : G.player.z;
-      const target = engine.stepTarget();
-      if (step.type === 'goto' || step.type === 'deliver' || step.type === 'talk') {
-        if (target && Math.hypot(px - target.x, pz - target.z) < 10) engine.advanceStep();
-      } else if (step.type === 'drive') {
-        if (target && Math.hypot(px - target.x, pz - target.z) < 12) {
-          if (G.currentVehicle) engine.advanceStep();
-          else G.missionText = step.text + ' (you need a car!)';
-        }
-      } else if (step.type === 'kill') {
-        st.kills = step.count - G.enemies.filter((e) => e.alive).length;
+
+    // One step type per small handler, so update() is a dispatch table.
+    stepHandlers: {
+      goto(G, engine, step, st, focus) {
+        const target = engine.stepTarget();
+        if (target && Math.hypot(focus.x - target.x, focus.z - target.z) < 10) engine.advanceStep();
+      },
+      drive(G, engine, step, st, focus) {
+        const target = engine.stepTarget();
+        if (!target || Math.hypot(focus.x - target.x, focus.z - target.z) >= 12) return;
+        if (G.currentVehicle) engine.advanceStep();
+        else G.missionText = step.text + ' (you need a car!)';
+      },
+      kill(G, engine, step, st) {
+        const alive = G.enemies.filter((e) => e.alive).length;
+        st.kills = step.count - alive;
         G.missionText = step.text + ' (' + Math.max(0, st.kills) + '/' + step.count + ')';
-        if (G.enemies.filter((e) => e.alive).length === 0) engine.advanceStep();
-      } else if (step.type === 'collect') {
+        if (alive === 0) engine.advanceStep();
+      },
+      collect(G, engine, step, st, focus) {
         for (const c of st.collectibles) {
-          if (!c.taken && Math.hypot(px - c.x, pz - c.z) < 4) {
+          if (!c.taken && Math.hypot(focus.x - c.x, focus.z - c.z) < 4) {
             c.taken = true;
             st.collected += 1;
             if (G.audio) G.audio.pickup();
@@ -265,15 +247,17 @@ export function createMissionEngine(G) {
         }
         G.missionText = step.text + ' (' + st.collected + '/' + step.count + ')';
         if (st.collected >= step.count) engine.advanceStep();
-      } else if (step.type === 'escape') {
+      },
+      escape(G, engine, step, st, focus, dt) {
         st.timer += dt;
         if (G.wanted === 0 && st.timer > 3) engine.advanceStep();
         else G.missionText = step.text + ' — wanted ' + G.wanted + '★ (' + Math.floor(st.timer) + 's)';
         if (st.timer > 120) engine.failMission('The police never lost you.');
-      } else if (step.type === 'race') {
+      },
+      race(G, engine, step, st, focus, dt) {
         st.timer -= dt;
         const cp = RACE_POINTS[st.raceIndex];
-        if (cp && Math.hypot(px - cp.x, pz - cp.z) < 14) {
+        if (cp && Math.hypot(focus.x - cp.x, focus.z - cp.z) < 14) {
           st.raceIndex += 1;
           if (G.audio) G.audio.pickup();
           engine.updateMarker();
@@ -281,11 +265,21 @@ export function createMissionEngine(G) {
         }
         G.missionText = step.text + ' — checkpoint ' + (st.raceIndex + 1) + '/' + RACE_POINTS.length + ' (' + Math.max(0, Math.ceil(st.timer)) + 's)';
         if (st.timer <= 0) engine.failMission('Out of time in the race.');
-      } else if (step.type === 'choice') {
+      },
+      choice(G, engine) {
         engine.choiceOpen = true;
         G.openChoice();
-      }
+      },
     },
+
+    update(dt) {
+      if (!engine.active) return;
+      const step = engine.currentStep();
+      if (!step) return;
+      const handler = engine.stepHandlers[step.type] || engine.stepHandlers.goto;
+      handler(G, engine, step, engine.stepState, playerFocus(G), dt);
+    },
+
     // Side missions: started at their marker, same step engine, smaller scope.
     startSide(id) {
       const def = SIDE_MISSIONS.find((s) => s.id === id);
@@ -322,12 +316,12 @@ export function createMissionEngine(G) {
       G.missionText = 'Side mission: ' + def.name;
       G.sideTarget = st.target || st.checkpoints?.[0] || null;
     },
+
     updateSide(dt) {
       const def = engine.side;
       if (!def) return;
       const st = engine.sideState;
-      const px = G.currentVehicle ? G.currentVehicle.x : G.player.x;
-      const pz = G.currentVehicle ? G.currentVehicle.z : G.player.z;
+      const focus = playerFocus(G);
       const finish = (bonus) => {
         G.money += def.reward + (bonus || 0);
         G.rep += 10;
@@ -340,17 +334,17 @@ export function createMissionEngine(G) {
         G.saveGame();
       };
       if (def.id === 'taxi') {
-        if (st.phase === 0 && st.target && Math.hypot(px - st.target.x, pz - st.target.z) < 8) {
+        if (st.phase === 0 && st.target && Math.hypot(focus.x - st.target.x, focus.z - st.target.z) < 8) {
           st.phase = 1;
           st.target = { x: 160, z: 200 };
           G.sideTarget = st.target;
           G.toast('Fare picked up! Drive them to Downtown.');
-        } else if (st.phase === 1 && st.target && Math.hypot(px - st.target.x, pz - st.target.z) < 10) finish(0);
+        } else if (st.phase === 1 && st.target && Math.hypot(focus.x - st.target.x, focus.z - st.target.z) < 10) finish(0);
       } else if (def.id === 'race' || def.id === 'timetrial' || def.id === 'delivery') {
         st.timer -= dt;
         const cp = st.checkpoints[st.progress];
         G.sideTarget = cp || null;
-        if (cp && Math.hypot(px - cp.x, pz - cp.z) < 14) {
+        if (cp && Math.hypot(focus.x - cp.x, focus.z - cp.z) < 14) {
           st.progress += 1;
           if (G.audio) G.audio.pickup();
           if (st.progress >= st.checkpoints.length) finish(Math.max(0, Math.floor(st.timer)) * 2);
@@ -361,7 +355,7 @@ export function createMissionEngine(G) {
         if (G.wanted === 0) finish(0);
       } else if (def.id === 'packages') {
         for (const p of st.packages) {
-          if (!p.taken && Math.hypot(px - p.x, pz - p.z) < 4) {
+          if (!p.taken && Math.hypot(focus.x - p.x, focus.z - p.z) < 4) {
             p.taken = true;
             st.progress += 1;
             if (G.audio) G.audio.pickup();
@@ -375,11 +369,11 @@ export function createMissionEngine(G) {
       } else if (def.id === 'rescue') {
         // Phase 0: walk to the civilian at the entrance. Phase 1: in a car,
         // drive them to the hospital front door.
-        if (st.phase === 0 && st.target && Math.hypot(px - st.target.x, pz - st.target.z) < 6) {
+        if (st.phase === 0 && st.target && Math.hypot(focus.x - st.target.x, focus.z - st.target.z) < 6) {
           st.phase = 1;
           G.sideTarget = PLACES.hospital;
           G.toast('Civilian picked up! Drive to Bay General Hospital.');
-        } else if (st.phase === 1 && G.currentVehicle && Math.hypot(px - PLACES.hospital.x, pz - PLACES.hospital.z) < 12) {
+        } else if (st.phase === 1 && G.currentVehicle && Math.hypot(focus.x - PLACES.hospital.x, focus.z - PLACES.hospital.z) < 12) {
           finish(0);
         }
       }

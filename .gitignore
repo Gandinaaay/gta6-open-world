@@ -1,2 +1,8 @@
+# Build output from main.ts — the dossier is regenerated on every build,
+# so it is never committed.
 out/
 out2/
+
+# Editor and OS clutter.
+.DS_Store
+*.swp

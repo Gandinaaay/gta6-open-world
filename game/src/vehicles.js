@@ -1,22 +1,32 @@
-// Vehicles, rewritten for the v4 recorded pass: box-built cars, SUVs, bikes,
-// taxis, trucks and police interceptors, with arcade driving (acceleration,
-// braking, steering that tightens with speed, a Space handbrake for sliding
-// turns, damage) and entering, exiting and stealing them off the street.
-// New in v4: headlights that glow at night and brake lights that flare when
-// you brake, so night driving reads at a glance.
+// Vehicles: box-built cars, SUVs, bikes, taxis, trucks and police
+// interceptors, with arcade driving (acceleration, braking, steering that
+// tightens with speed, a Space handbrake for sliding turns, damage) and
+// entering, exiting and stealing them off the street. Headlights glow at
+// night and brake lights flare when you brake, so night driving reads at
+// a glance. Round 2: each body is assembled from a small parts list instead
+// of a chain of ad-hoc add calls, so a new body style is one more row.
 import { VEHICLE_TYPES, KEYS, HANDBRAKE_GRIP } from './config.js';
 import { collideCircle, clampToWorld } from './city.js';
 
 let vehicleId = 0;
 
-function carPart(w, h, d, color, x, y, z, mat = null) {
+function boxPart(list, w, h, d, color, x, y, z, mat = null) {
   const m = new THREE.Mesh(
     new THREE.BoxGeometry(w, h, d),
     mat || new THREE.MeshLambertMaterial({ color }),
   );
   m.position.set(x, y, z);
   m.castShadow = true;
+  list.push(m);
   return m;
+}
+
+function wheel(list, x, z, mat) {
+  const w = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 12), mat);
+  w.rotation.z = Math.PI / 2;
+  w.position.set(x, 0.42, z);
+  list.push(w);
+  return w;
 }
 
 export function makeVehicleMesh(typeKey) {
@@ -26,47 +36,50 @@ export function makeVehicleMesh(typeKey) {
   const color = type.color;
   const glass = new THREE.MeshLambertMaterial({ color: 0x101418 });
   const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
+  const parts = [];
+  const wheels = [];
 
   if (typeKey === 'bike') {
-    group.add(carPart(0.5, 0.5, 2.2, color, 0, 0.7, 0));
-    group.add(carPart(0.4, 0.5, 0.7, 0x222222, 0, 1.05, -0.3));
-    const wheels = [];
+    boxPart(parts, 0.5, 0.5, 2.2, color, 0, 0.7, 0);
+    boxPart(parts, 0.4, 0.5, 0.7, 0x222222, 0, 1.05, -0.3);
     for (const z of [-0.85, 0.85]) {
       const w = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.18, 12), wheelMat);
       w.rotation.z = Math.PI / 2;
       w.position.set(0, 0.42, z);
-      group.add(w);
+      parts.push(w);
       wheels.push(w);
     }
     const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.1), new THREE.MeshBasicMaterial({ color: 0xfff2b0 }));
     head.position.set(0, 0.75, -1.12);
-    group.add(head);
+    parts.push(head);
     group.userData.headlight = head;
+    for (const p of parts) group.add(p);
     return { group, wheels, type };
   }
 
   const long = typeKey === 'truck' ? 5.2 : typeKey === 'suv' ? 4.6 : 4.2;
   const wide = typeKey === 'suv' || typeKey === 'truck' ? 2.1 : 1.9;
   const bodyH = typeKey === 'suv' || typeKey === 'truck' ? 1.1 : 0.75;
-  group.add(carPart(wide, bodyH, long, color, 0, 0.75, 0));
-  group.add(carPart(wide * 0.85, 0.65, long * 0.5, 0x000000, 0, 1.35, typeKey === 'truck' ? 1.2 : -0.2, glass));
+  const cabinZ = typeKey === 'truck' ? 1.2 : -0.2;
+  boxPart(parts, wide, bodyH, long, color, 0, 0.75, 0);
+  boxPart(parts, wide * 0.85, 0.65, long * 0.5, 0x000000, 0, 1.35, cabinZ, glass);
   // A thin spoiler on the sport car and a roof rack on the SUV, so the silhouettes differ.
-  if (typeKey === 'sport') group.add(carPart(wide * 0.9, 0.08, 0.4, 0x111111, 0, 1.25, long / 2 - 0.3));
-  if (typeKey === 'suv') group.add(carPart(wide * 0.7, 0.1, long * 0.6, 0x111111, 0, 1.75, 0));
+  if (typeKey === 'sport') boxPart(parts, wide * 0.9, 0.08, 0.4, 0x111111, 0, 1.25, long / 2 - 0.3);
+  if (typeKey === 'suv') boxPart(parts, wide * 0.7, 0.1, long * 0.6, 0x111111, 0, 1.75, 0);
   if (typeKey === 'police') {
-    group.add(carPart(wide * 0.9, 0.25, 0.5, 0xffffff, 0, 1.15, 0.4));
-    group.add(carPart(0.5, 0.25, 0.5, 0xff0000, -0.5, 1.75, -0.2));
-    group.add(carPart(0.5, 0.25, 0.5, 0x0000ff, 0.5, 1.75, -0.2));
+    boxPart(parts, wide * 0.9, 0.25, 0.5, 0xffffff, 0, 1.15, 0.4);
+    boxPart(parts, 0.5, 0.25, 0.5, 0xff0000, -0.5, 1.75, -0.2);
+    boxPart(parts, 0.5, 0.25, 0.5, 0x0000ff, 0.5, 1.75, -0.2);
     const bar = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.2), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
     bar.position.set(-0.5, 1.9, -0.2);
-    group.add(bar);
+    parts.push(bar);
     group.userData.lightBar = bar;
   }
   if (typeKey === 'taxi') {
-    group.add(carPart(1.0, 0.3, 0.8, 0xf2b705, 0, 1.75, -0.2));
+    boxPart(parts, 1.0, 0.3, 0.8, 0xf2b705, 0, 1.75, -0.2);
     const sign = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.3, 0.5), new THREE.MeshBasicMaterial({ color: 0xffe600 }));
     sign.position.set(0, 1.8, -0.2);
-    group.add(sign);
+    parts.push(sign);
   }
   // Headlights up front, brake lights at the back — both are plain bright
   // boxes, so they read in daylight and glow at night.
@@ -75,21 +88,17 @@ export function makeVehicleMesh(typeKey) {
   headL.position.set(-wide / 2 + 0.3, 0.8, -long / 2 - 0.02);
   const headR = headL.clone();
   headR.position.x = wide / 2 - 0.3;
-  group.add(headL, headR);
+  parts.push(headL, headR);
   group.userData.headlight = headL;
   const brakeMat = new THREE.MeshBasicMaterial({ color: 0x881111 });
   const brake = new THREE.Mesh(new THREE.BoxGeometry(wide * 0.8, 0.18, 0.1), brakeMat);
   brake.position.set(0, 0.85, long / 2 + 0.02);
-  group.add(brake);
+  parts.push(brake);
   group.userData.brakeLight = brake;
-  const wheels = [];
   for (const [x, z] of [[-wide / 2, long / 2 - 0.8], [wide / 2, long / 2 - 0.8], [-wide / 2, -long / 2 + 0.8], [wide / 2, -long / 2 + 0.8]]) {
-    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 12), wheelMat);
-    w.rotation.z = Math.PI / 2;
-    w.position.set(x, 0.42, z);
-    group.add(w);
-    wheels.push(w);
+    wheels.push(wheel(parts, x, z, wheelMat));
   }
+  for (const p of parts) group.add(p);
   return { group, wheels, type };
 }
 
@@ -112,9 +121,10 @@ export function spawnVehicle(scene, typeKey, x, z, yaw = 0, opts = {}) {
   return v;
 }
 
-// Arcade driving: W accelerates, S brakes or reverses, A/D steer (tighter at low
-// speed), Space is the handbrake — it cuts grip and lets the tail slide around
-// a corner, with a skid sound. Hitting a building slows you down and dents the car.
+// Arcade driving: W accelerates, S brakes or reverses, A/D steer (tighter at
+// low speed), Space is the handbrake — it cuts grip and lets the tail slide
+// around a corner, with a skid sound. Hitting a building slows you down and
+// dents the car.
 export function driveVehicle(G, v, dt) {
   const keys = G.keys;
   const up = G.upgrades || {};
@@ -128,7 +138,10 @@ export function driveVehicle(G, v, dt) {
   }
   // Drag, rolling resistance, and the handbrake bleeding speed fast.
   v.speed -= v.speed * (handbrake ? 1.6 : 0.55) * dt;
-  if (!keys[KEYS.forward] && !keys[KEYS.back]) v.speed -= Math.sign(v.speed) * Math.min(Math.abs(v.speed), 8 * dt);
+  if (!keys[KEYS.forward] && !keys[KEYS.back]) {
+    const decel = Math.min(Math.abs(v.speed), 8 * dt);
+    v.speed -= Math.sign(v.speed) * decel;
+  }
   v.speed = Math.max(-14, Math.min(top, v.speed));
   const steer = (keys[KEYS.left] ? 1 : 0) - (keys[KEYS.right] ? 1 : 0);
   const dir = v.speed >= 0 ? 1 : -1;
@@ -154,7 +167,8 @@ export function driveVehicle(G, v, dt) {
   v.group.position.set(v.x, 0, v.z);
   v.group.rotation.y = v.yaw;
   // Body roll into the turn, stronger with the handbrake out.
-  v.group.rotation.z = -steer * Math.min(1, Math.abs(v.speed) / 30) * (handbrake ? 0.12 : 0.06);
+  const roll = Math.min(1, Math.abs(v.speed) / 30) * (handbrake ? 0.12 : 0.06);
+  v.group.rotation.z = -steer * roll;
   for (const w of v.wheels) w.rotation.x += v.speed * dt * 2.4;
   if (v.isPolice && v.group.userData.lightBar) {
     v.lightPhase += dt * 6;
@@ -206,6 +220,7 @@ export function exitVehicle(G) {
   v.isPlayer = false;
   v.speed = 0;
   G.currentVehicle = null;
+  // Step out on the driver's side.
   G.player.x = v.x + Math.sin(v.yaw + Math.PI / 2) * 2.5;
   G.player.z = v.z + Math.cos(v.yaw + Math.PI / 2) * 2.5;
   G.player.yaw = v.yaw;
