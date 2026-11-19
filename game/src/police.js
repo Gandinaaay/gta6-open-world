@@ -3,14 +3,15 @@
 // search-and-lose system that lets you break line of sight and cool off.
 // More stars means more cars, faster cars, and a shorter fuse before they
 // give up. Pursuit cars flash their light bars even though they never call
-// driveVehicle — the chase reads from far away. Round 2: the chase steers
-// with a small heading helper and the heat decay is one table lookup.
+// driveVehicle — the chase reads from far away. Round 3: the pursuit is one
+// small steering loop (turn toward the intercept point, match speed, ram),
+// and the heat decay is one table lookup.
 import { spawnVehicle } from './vehicles.js';
 import { randomRange } from './random.js';
 import { WANTED_COOLOFF_BASE, WANTED_FLASH_TIME } from './config.js';
 
 // Seconds you must stay out of sight before one star drops, by wanted level.
-function cooloffSeconds(wanted) {
+function cooloffFor(wanted) {
   return Math.max(6, WANTED_COOLOFF_BASE - wanted);
 }
 
@@ -24,7 +25,7 @@ export function addWanted(G, stars) {
   }
 }
 
-function playerPos(G) {
+function playerState(G) {
   const focus = G.currentVehicle || G.player;
   const vx = G.currentVehicle ? -Math.sin(G.currentVehicle.yaw) * G.currentVehicle.speed : 0;
   const vz = G.currentVehicle ? -Math.cos(G.currentVehicle.yaw) * G.currentVehicle.speed : 0;
@@ -34,21 +35,21 @@ function playerPos(G) {
   };
 }
 
-function turnToward(yaw, wantYaw, maxTurn, dt) {
+function steerToward(yaw, wantYaw, maxTurn, dt) {
   let dy = wantYaw - yaw;
   while (dy > Math.PI) dy -= Math.PI * 2;
   while (dy < -Math.PI) dy += Math.PI * 2;
   return yaw + Math.max(-maxTurn * dt, Math.min(maxTurn * dt, dy));
 }
 
-function flashLightBar(cop, dt) {
+function blinkLightBar(cop, dt) {
   if (!cop.group.userData.lightBar) return;
   cop.lightPhase += dt * 6;
   cop.group.userData.lightBar.material.color.setHex(Math.sin(cop.lightPhase) > 0 ? 0xff0000 : 0x0000ff);
 }
 
 export function updatePolice(G, dt, random) {
-  const p = playerPos(G);
+  const p = playerState(G);
   // Wanted decays only when no police car is near you for a while. The hotter
   // you are, the longer you have to stay hidden before a star drops.
   if (G.wanted > 0) {
@@ -56,7 +57,7 @@ export function updatePolice(G, dt, random) {
     for (const cop of G.police) nearestV = Math.min(nearestV, Math.hypot(cop.x - p.x, cop.z - p.z));
     if (nearestV > 90) {
       G.wantedTimer += dt;
-      if (G.wantedTimer > cooloffSeconds(G.wanted)) {
+      if (G.wantedTimer > cooloffFor(G.wanted)) {
         G.wanted -= 1;
         G.wantedTimer = 0;
         G.toast(G.wanted === 0 ? 'You lost the police.' : 'Heat is cooling down — wanted level ' + G.wanted + '.');
@@ -91,7 +92,7 @@ export function updatePolice(G, dt, random) {
     const tx = p.x + p.vx * 0.5;
     const tz = p.z + p.vz * 0.5;
     const dist = Math.hypot(p.x - cop.x, p.z - cop.z) || 1;
-    cop.yaw = turnToward(cop.yaw, Math.atan2(-(tx - cop.x), -(tz - cop.z)), 2.6, dt);
+    cop.yaw = steerToward(cop.yaw, Math.atan2(-(tx - cop.x), -(tz - cop.z)), 2.6, dt);
     const targetSpeed = Math.min(cop.topSpeed, dist * 0.8 + 18);
     cop.speed += (targetSpeed - cop.speed) * Math.min(1, dt * 1.2);
     cop.x -= Math.sin(cop.yaw) * cop.speed * dt;
@@ -101,7 +102,7 @@ export function updatePolice(G, dt, random) {
     cop.group.position.set(cop.x, 0, cop.z);
     cop.group.rotation.y = cop.yaw;
     for (const w of cop.wheels) w.rotation.x += cop.speed * dt * 2.4;
-    flashLightBar(cop, dt);
+    blinkLightBar(cop, dt);
     // Ram the player's car: damage and a shove.
     if (G.currentVehicle && dist < 4.5) {
       G.currentVehicle.health = Math.max(0, G.currentVehicle.health - 5 * dt);

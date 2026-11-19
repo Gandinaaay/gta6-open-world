@@ -2,37 +2,57 @@
 // whose limbs swing with the stride, plus walk / run / sprint / jump / crouch
 // and the smooth third-person camera that follows him — and the car —
 // everywhere. A landing squash sells the jump, and a strafe lean makes
-// sidesteps read on screen. Round 2: the walk cycle and the camera are
-// driven from one shared "pace" value instead of scattered constants.
-import { WORLD, KEYS } from './config.js';
+// sidesteps read on screen. Round 3: the figure is assembled from one parts
+// table, and the walk cycle and the camera share a single "pace" number
+// instead of scattered constants.
+import { KEYS } from './config.js';
 import { collideCircle, clampToWorld } from './city.js';
 
 const SKIN = 0xc98d64;
 const PANTS = 0x2b3a55;
 const HAIR = 0x1a1a1a;
 
-function part(w, h, d, color, x, y, z) {
-  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), new THREE.MeshLambertMaterial({ color }));
-  m.position.set(x, y, z);
-  m.castShadow = true;
-  return m;
+// [name, width, height, depth, colour source, x, y, z]
+// colour source: 'shirt' (changes with clothes), 'skin', 'pants', 'hair'.
+const FIGURE_PARTS = [
+  ['torso', 1.1, 1.3, 0.55, 'shirt', 0, 1.55, 0],
+  ['head', 0.55, 0.55, 0.55, 'skin', 0, 2.5, 0],
+  ['hair', 0.58, 0.22, 0.58, 'hair', 0, 2.82, 0],
+  ['armL', 0.32, 1.1, 0.32, 'shirt', -0.75, 2.15, 0],
+  ['armR', 0.32, 1.1, 0.32, 'shirt', 0.75, 2.15, 0],
+  ['legL', 0.4, 1.0, 0.4, 'pants', -0.3, 1.0, 0],
+  ['legR', 0.4, 1.0, 0.4, 'pants', 0.3, 1.0, 0],
+];
+
+const PART_COLORS = {
+  shirt: (shirtColor) => shirtColor,
+  skin: () => SKIN,
+  pants: () => PANTS,
+  hair: () => HAIR,
+};
+
+function buildFigure(shirtColor) {
+  const group = new THREE.Group();
+  group.name = 'player';
+  const parts = {};
+  for (const [name, w, h, d, source, x, y, z] of FIGURE_PARTS) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      new THREE.MeshLambertMaterial({ color: PART_COLORS[source](shirtColor) }),
+    );
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    // Pivot each limb at its top so it swings like a real stride.
+    if (name.startsWith('arm') || name.startsWith('leg')) m.geometry.translate(0, -0.5, 0);
+    group.add(m);
+    parts[name] = m;
+  }
+  return { group, ...parts };
 }
 
 export function createPlayer(scene, shirtColor = 0x8a2be2) {
-  const group = new THREE.Group();
-  group.name = 'player';
-  const torso = part(1.1, 1.3, 0.55, shirtColor, 0, 1.55, 0);
-  const head = part(0.55, 0.55, 0.55, SKIN, 0, 2.5, 0);
-  const hair = part(0.58, 0.22, 0.58, HAIR, 0, 2.82, 0);
-  const armL = part(0.32, 1.1, 0.32, shirtColor, -0.75, 2.15, 0);
-  const armR = part(0.32, 1.1, 0.32, shirtColor, 0.75, 2.15, 0);
-  const legL = part(0.4, 1.0, 0.4, PANTS, -0.3, 1.0, 0);
-  const legR = part(0.4, 1.0, 0.4, PANTS, 0.3, 1.0, 0);
-  // Pivot each limb at its top so it swings like a real stride.
-  for (const l of [armL, armR, legL, legR]) l.geometry.translate(0, -0.5, 0);
-  group.add(torso, head, hair, armL, armR, legL, legR);
+  const { group, torso, head, armL, armR, legL, legR } = buildFigure(shirtColor);
   scene.add(group);
-
   const player = {
     group, torso, head, armL, armR, legL, legR,
     x: 0, z: 120, y: 0, yaw: Math.PI, vy: 0, onGround: true,
@@ -78,8 +98,8 @@ export function updatePlayer(G, dt) {
   const topSpeed = crouch ? 2.2 : sprint ? 11.5 : intent.moving ? 5.5 : 0;
   // Smooth acceleration: the hero eases up to speed instead of snapping to it.
   p.speed += (topSpeed - p.speed) * Math.min(1, dt * 10);
-  let nx = p.x + intent.x * p.speed * dt;
-  let nz = p.z + intent.z * p.speed * dt;
+  const nx = p.x + intent.x * p.speed * dt;
+  const nz = p.z + intent.z * p.speed * dt;
   const hit = collideCircle(G.city.colliders, nx, nz, 0.7);
   const clamped = clampToWorld(hit.x, hit.z);
   p.x = clamped.x;

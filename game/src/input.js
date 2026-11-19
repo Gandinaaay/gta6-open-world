@@ -14,16 +14,16 @@ export const ACTION_CONFIRM = 16;
 export const ACTION_HORN = 32;
 
 // Arrow key -> the WASD code it mirrors, so both layouts drive one state.
-const ARROW_MIRROR = {
+const ARROW_TO_WASD = {
   ArrowUp: KEYS.forward,
   ArrowDown: KEYS.back,
   ArrowLeft: KEYS.left,
   ArrowRight: KEYS.right,
 };
 
-// One-shot code -> the flag it sets. Weapon keys and the mission key are
-// handled separately because they act on the game state directly.
-const PRESS_FLAGS = {
+// One-shot code -> the flag it sets. Weapon keys and the mission key act on
+// the game state directly, so they are not in this table.
+const PRESS_TO_FLAG = {
   [KEYS.interact]: ACTION_INTERACT,
   [KEYS.enterVehicle]: ACTION_ENTER,
   [KEYS.punch]: ACTION_PUNCH,
@@ -31,7 +31,7 @@ const PRESS_FLAGS = {
   [KEYS.horn]: ACTION_HORN,
 };
 
-const WEAPON_KEYS = {
+const KEY_TO_WEAPON = {
   [KEYS.weapon1]: 'fists',
   [KEYS.weapon2]: 'pistol',
   [KEYS.weapon3]: 'smg',
@@ -39,56 +39,56 @@ const WEAPON_KEYS = {
   [KEYS.weapon5]: 'rifle',
 };
 
-const SCROLL_KEYS = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
+const SCROLL_PREVENT = ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'];
 
 export function createInput(G) {
   const keys = G.keys;
   let queued = 0;
-  let lastX = 0;
-  let lastY = 0;
+  let dragX = 0;
+  let dragY = 0;
   let dragging = false;
 
-  function onKeyDown(event) {
+  function keyDown(event) {
     const target = event.target;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'BUTTON')) return;
-    const code = ARROW_MIRROR[event.code] || event.code;
+    const code = ARROW_TO_WASD[event.code] || event.code;
     keys[code] = true;
     if (event.code !== code) keys[event.code] = true;
     if (event.repeat) return;
-    if (PRESS_FLAGS[code] !== undefined) {
-      queued |= PRESS_FLAGS[code];
+    if (PRESS_TO_FLAG[code] !== undefined) {
+      queued |= PRESS_TO_FLAG[code];
     } else if (event.code === 'Enter' || code === KEYS.jump) {
       queued |= ACTION_CONFIRM;
-    } else if (WEAPON_KEYS[code]) {
-      const want = WEAPON_KEYS[code];
+    } else if (KEY_TO_WEAPON[code]) {
+      const want = KEY_TO_WEAPON[code];
       if (want === 'fists' || G.ownedWeapons.includes(want)) G.combat.weapon = want;
     } else if (code === KEYS.mission && G.toggleMissionMenu) {
       G.toggleMissionMenu();
     }
-    if (SCROLL_KEYS.includes(event.code)) event.preventDefault();
+    if (SCROLL_PREVENT.includes(event.code)) event.preventDefault();
   }
 
-  function onKeyUp(event) {
-    const code = ARROW_MIRROR[event.code] || event.code;
+  function keyUp(event) {
+    const code = ARROW_TO_WASD[event.code] || event.code;
     keys[code] = false;
     keys[event.code] = false;
   }
 
-  function onBlur() {
+  function loseFocus() {
     for (const k of Object.keys(keys)) keys[k] = false;
     dragging = false;
     G.mouseFire = false;
   }
 
-  window.addEventListener('keydown', onKeyDown);
-  window.addEventListener('keyup', onKeyUp);
-  window.addEventListener('blur', onBlur);
+  window.addEventListener('keydown', keyDown);
+  window.addEventListener('keyup', keyUp);
+  window.addEventListener('blur', loseFocus);
 
   const canvas = G.renderer.domElement;
   canvas.addEventListener('pointerdown', (event) => {
     dragging = true;
-    lastX = event.clientX;
-    lastY = event.clientY;
+    dragX = event.clientX;
+    dragY = event.clientY;
     G.audio.unlock();
     if (event.button === 0) G.mouseFire = true;
   });
@@ -98,10 +98,10 @@ export function createInput(G) {
   });
   window.addEventListener('pointermove', (event) => {
     if (!dragging) return;
-    const dx = event.clientX - lastX;
-    const dy = event.clientY - lastY;
-    lastX = event.clientX;
-    lastY = event.clientY;
+    const dx = event.clientX - dragX;
+    const dy = event.clientY - dragY;
+    dragX = event.clientX;
+    dragY = event.clientY;
     // Dragging left/right orbits the camera and turns the hero with it.
     G.camOrbit += dx * 0.005;
     if (Math.abs(dx) > 2) G.player.yaw += dx * 0.002;

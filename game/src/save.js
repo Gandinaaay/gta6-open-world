@@ -3,8 +3,8 @@
 // House (clothes) and the Tuner Garage (vehicle upgrades). The same panel
 // serves the shops and the garage; only its title and rows change. The save
 // also remembers the time of day and the weather, so Continue resumes the
-// same sky you left. Round 2: the save is one field table, so adding a
-// field is one row instead of two scattered lines.
+// same sky you left. Round 3: the save is one field table (key + read +
+// write), so adding a field is one row instead of two scattered lines.
 import { SAVE_KEY, WEAPONS, VEHICLE_TYPES, CLOTHES, UPGRADES } from './config.js';
 import { setShirtColor } from './player.js';
 import { spawnVehicle } from './vehicles.js';

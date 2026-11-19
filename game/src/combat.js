@@ -3,16 +3,16 @@
 // raycast, no physics library needed. Ray hits resolve through
 // userData.owner, which every damageable figure and vehicle sets on its
 // group. Hits knock the enemy back a step, so a shot feels like it landed
-// instead of just ticking a number down. Round 2: the hit resolution is one
-// small function, and the shot is assembled from an aim (origin + direction)
-// so foot and vehicle fire share the same path.
+// instead of just ticking a number down. Round 3: the shot is built from one
+// aim (origin + direction) so foot and vehicle fire share the same path, and
+// hit resolution is one small dispatch by owner kind.
 import { WEAPONS } from './config.js';
 
 const raycaster = new THREE.Raycaster();
-const forwardVec = new THREE.Vector3();
+const upVec = new THREE.Vector3();
 
 // Where the player is aiming from, and in which direction, on foot or in a car.
-function aimFrom(G) {
+function aimOf(G) {
   const focus = G.currentVehicle || G.player;
   const yaw = focus.yaw;
   return {
@@ -21,7 +21,7 @@ function aimFrom(G) {
   };
 }
 
-function ownerOf(hit) {
+function findOwner(hit) {
   let obj = hit.object;
   while (obj && !obj.userData.owner) obj = obj.parent;
   return obj ? obj.userData.owner : null;
@@ -47,7 +47,7 @@ export function createCombat(G) {
       }
       combat.cooldown = w.rate;
       if (combat.weapon !== 'fists') combat.ammo[combat.weapon] -= 1;
-      const { origin, dir } = aimFrom(G);
+      const { origin, dir } = aimOf(G);
       if (combat.weapon === 'fists') {
         combat.melee(origin, dir);
         return true;
@@ -104,7 +104,7 @@ export function createCombat(G) {
       if (hits.length > 0) {
         const hit = hits[0];
         end = hit.point.clone();
-        combat.resolveHit(ownerOf(hit), w);
+        combat.resolveHit(findOwner(hit), w);
         combat.spark(end);
       }
       combat.tracer(origin, end);

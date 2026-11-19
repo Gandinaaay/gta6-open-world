@@ -5,7 +5,7 @@
 // panel is hidden for the shot so the city, the car and the HUD fill the
 // frame. The start shot gets a slight camera angle so the dawn sun disc sits
 // beside the hero, and the chase shot flashes the wanted stars for the frame.
-// Round 2: each scene is one function in a table, sharing two small drivers
+// Round 3: each scene is one function in a table, sharing two small drivers
 // (walkFor / driveFor) and one car-grabber.
 import { STEP } from './config.js';
 import { enterVehicle } from './vehicles.js';
@@ -32,7 +32,7 @@ function walkFor(G, seconds) {
   holdKeys(G, seconds, ['KeyW']);
 }
 
-function takeCar(G, x, z, yaw) {
+function grabCar(G, x, z, yaw) {
   const car = G.vehicles.find((v) => v.typeKey === 'sport' && !v.isPlayer) || G.vehicles[0];
   car.x = x;
   car.z = z;
@@ -42,7 +42,7 @@ function takeCar(G, x, z, yaw) {
   return car;
 }
 
-function baseState(G) {
+function freshState(G) {
   G.screen = 'play';
   G.player.health = 100;
   G.money = 12500;
@@ -53,7 +53,7 @@ const SCENES = {
   // Dawn over Downtown: the hero on foot, the city waking up behind the title,
   // the sunset sun disc glowing low on the horizon beside him.
   start(G) {
-    baseState(G);
+    freshState(G);
     G.dayTime = 0.05;
     G.weather = 'clear';
     G.player.x = 0;
@@ -71,10 +71,10 @@ const SCENES = {
   // Night in Downtown: 3 wanted stars, VBPD interceptors on your tail, the
   // mission marker glowing ahead and the minimap full of blue dots.
   chase(G) {
-    baseState(G);
+    freshState(G);
     G.dayTime = 0.97;
     G.weather = 'clear';
-    takeCar(G, 0, -100, 0);
+    grabCar(G, 0, -100, 0);
     G.wanted = 3;
     G.crimeFlash = 2;
     G.missionText = 'Mission 4: The Getaway — escape the police pursuit!';
@@ -106,10 +106,10 @@ const SCENES = {
   // Night Run: the illegal beach race at Ocean Beach, rain on the road, the
   // race checkpoints and the neon club glowing behind you.
   night(G) {
-    baseState(G);
+    freshState(G);
     G.dayTime = 0.94;
     G.weather = 'rain';
-    takeCar(G, 400, -40, 0);
+    grabCar(G, 400, -40, 0);
     G.wanted = 0;
     G.missions.missionIndex = 6;
     G.missions.startMission(6);
@@ -121,10 +121,10 @@ const SCENES = {
   // Midday Downtown, driving the Comet GT through live traffic with a
   // mission objective on the HUD and the minimap.
   play(G) {
-    baseState(G);
+    freshState(G);
     G.dayTime = 0.35;
     G.weather = 'clear';
-    takeCar(G, 0, 150, Math.PI);
+    grabCar(G, 0, 150, Math.PI);
     G.wanted = 0;
     G.missions.missionIndex = 0;
     G.missions.startMission(0);

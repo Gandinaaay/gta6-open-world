@@ -3,10 +3,10 @@
 // in one place. Nothing here knows about menus — main.js owns the screens and
 // calls update(). The game state object G is the one thing every module
 // shares. A sunset sun disc hangs low at dawn and dusk, and a wanted sting
-// sounds the moment a new star lands. Round 2: the scene dressing (lights,
-// beacon, rain, packages) is built by small helpers so createGame reads as
-// a checklist instead of one long block.
-import { WORLD, STEP, DAY_LENGTH, KEYS, districtAt, SUNSET_WINDOW, WANTED_FLASH_TIME } from './config.js';
+// sounds the moment a new star lands. Round 3: the scene dressing (lights,
+// sun disc, beacon, rain, packages) is built by small helpers so createGame
+// reads as a checklist instead of one long block.
+import { WORLD, STEP, DAY_LENGTH, districtAt, SUNSET_WINDOW, WANTED_FLASH_TIME } from './config.js';
 import { createRandom } from './random.js';
 import { createAudio } from './audio.js';
 import { buildCity, PLACES, SHOPS } from './city.js';
@@ -20,7 +20,7 @@ import { createHud, showToast } from './hud.js';
 import { saveGame, loadGame, openShop, openGarage } from './save.js';
 import { sunsetTexture } from './textures.js';
 
-function makeLights(scene) {
+function buildLights(scene) {
   const sun = new THREE.DirectionalLight(0xfff2d8, 1.1);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
@@ -36,7 +36,7 @@ function makeLights(scene) {
   return { sun, hemi };
 }
 
-function makeSunDisc(scene) {
+function buildSunDisc(scene) {
   // Sunset sun disc: a glowing billboard that follows the sun's direction and
   // only shows while the sun is low, so dawn and dusk get a real horizon glow.
   const disc = new THREE.Mesh(
@@ -48,7 +48,7 @@ function makeSunDisc(scene) {
   return disc;
 }
 
-function makeBeacon(scene) {
+function buildBeacon(scene) {
   // Mission marker beacon: a pillar of light over the current objective.
   const beacon = new THREE.Mesh(
     new THREE.CylinderGeometry(2.2, 2.2, 60, 12, 1, true),
@@ -59,7 +59,7 @@ function makeBeacon(scene) {
   return beacon;
 }
 
-function makeRain(scene, count = 900) {
+function buildRain(scene, count = 900) {
   // Rain: a cloud of falling streaks, visible only when it rains.
   const geo = new THREE.BufferGeometry();
   const pos = new Float32Array(count * 3);
@@ -90,15 +90,15 @@ export function createGame(canvas, seed) {
   const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
   camera.position.set(0, 6, 140);
 
-  const { sun, hemi } = makeLights(scene);
-  const sunDisc = makeSunDisc(scene);
+  const { sun, hemi } = buildLights(scene);
+  const sunDisc = buildSunDisc(scene);
   const city = buildCity(scene, random);
   const audio = createAudio();
   const player = createPlayer(scene);
-  const beacon = makeBeacon(scene);
+  const beacon = buildBeacon(scene);
   const packageGroup = new THREE.Group();
   scene.add(packageGroup);
-  const { rain, count: rainCount } = makeRain(scene);
+  const { rain, count: rainCount } = buildRain(scene);
 
   const G = {
     renderer, scene, camera, sun, hemi, random, audio,
@@ -224,7 +224,7 @@ export function createGame(canvas, seed) {
     document.getElementById('choice-take').onclick = () => finish(false);
   };
 
-  function respawnAtHospital(G, fine, lost, title, line) {
+  function sendToHospital(G, title, line) {
     if (G.currentVehicle) exitVehicle(G);
     G.player.x = 140;
     G.player.z = 60;
@@ -239,14 +239,14 @@ export function createGame(canvas, seed) {
     G.money -= fine;
     G.wanted = 0;
     G.police.length = 0;
-    respawnAtHospital(G, fine, 0, 'BUSTED', 'The VBPD caught you. You paid $' + fine + ' in fines and woke up outside Bay General Hospital.');
+    sendToHospital(G, 'BUSTED', 'The VBPD caught you. You paid $' + fine + ' in fines and woke up outside Bay General Hospital.');
   };
   G.wasted = (cause) => {
     if (G.screen !== 'play') return;
     const lost = Math.min(G.money, 500);
     G.money -= lost;
     G.wanted = 0;
-    respawnAtHospital(G, 0, lost, 'WASTED', 'You were ' + (cause || 'taken down') + '. You lost $' + lost + ' and woke up at Bay General Hospital.');
+    sendToHospital(G, 'WASTED', 'You were ' + (cause || 'taken down') + '. You lost $' + lost + ' and woke up at Bay General Hospital.');
   };
   G.onVehicleCrash = () => {
     if (G.currentVehicle && G.currentVehicle.health <= 0) {

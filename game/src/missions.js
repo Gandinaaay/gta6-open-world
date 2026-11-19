@@ -6,9 +6,10 @@
 // Every step carries its own marker, radius and reward; the engine advances
 // them, and the HUD shows the current step text plus a live distance to the
 // marker. Finishing a story mission also tops up 20 pistol rounds, so the
-// next fight never starts dry. Round 2: the mission tables are plain rows
+// next fight never starts dry. Round 3: the mission tables are plain rows
 // (a step is [type, place, text, extra]) that one builder turns into the
-// objects the engine runs, so the story reads like a script.
+// objects the engine runs, the step handlers are named functions in one
+// table, and each side mission has its own setup function in one table.
 import { PLACES } from './city.js';
 import { spawnEnemy, clearEnemies } from './combat.js';
 import { spawnVehicle } from './vehicles.js';
@@ -60,7 +61,7 @@ const MISSION_ROWS = [
   ]],
 ];
 
-function buildStep(row) {
+function makeStep(row) {
   const [type, place, text, extra] = row;
   const step = { type, place, text };
   if (type === 'kill' || type === 'collect') step.count = extra;
@@ -70,7 +71,7 @@ function buildStep(row) {
 
 export const MISSIONS = MISSION_ROWS.map(([id, title, briefing, reward, rep, steps]) => ({
   id, title, briefing, reward, rep,
-  steps: steps.map(buildStep),
+  steps: steps.map(makeStep),
 }));
 
 // Rows: [id, display name, description, marker place, reward].
@@ -97,9 +98,107 @@ const RACE_POINTS = [
   { x: -200, z: 200 }, { x: 0, z: 300 }, { x: 300, z: 300 }, { x: 420, z: 120 },
 ];
 
-function playerFocus(G) {
+function focusOf(G) {
   return G.currentVehicle || G.player;
 }
+
+function near(focus, target, radius) {
+  return target && Math.hypot(focus.x - target.x, focus.z - target.z) < radius;
+}
+
+// One handler per step type; update() is a dispatch table over them.
+const STEP_HANDLERS = {
+  goto(G, engine, step, st, focus) {
+    if (near(focus, engine.stepTarget(), 10)) engine.advanceStep();
+  },
+  drive(G, engine, step, st, focus) {
+    const target = engine.stepTarget();
+    if (!near(focus, target, 12)) return;
+    if (G.currentVehicle) engine.advanceStep();
+    else G.missionText = step.text + ' (you need a car!)';
+  },
+  kill(G, engine, step, st) {
+    const alive = G.enemies.filter((e) => e.alive).length;
+    st.kills = step.count - alive;
+    G.missionText = step.text + ' (' + Math.max(0, st.kills) + '/' + step.count + ')';
+    if (alive === 0) engine.advanceStep();
+  },
+  collect(G, engine, step, st, focus) {
+    for (const c of st.collectibles) {
+      if (!c.taken && near(focus, c, 4)) {
+        c.taken = true;
+        st.collected += 1;
+        if (G.audio) G.audio.pickup();
+        G.toast('Collected ' + st.collected + '/' + step.count);
+        engine.updateMarker();
+      }
+    }
+    G.missionText = step.text + ' (' + st.collected + '/' + step.count + ')';
+    if (st.collected >= step.count) engine.advanceStep();
+  },
+  escape(G, engine, step, st, focus, dt) {
+    st.timer += dt;
+    if (G.wanted === 0 && st.timer > 3) engine.advanceStep();
+    else G.missionText = step.text + ' — wanted ' + G.wanted + '★ (' + Math.floor(st.timer) + 's)';
+    if (st.timer > 120) engine.failMission('The police never lost you.');
+  },
+  race(G, engine, step, st, focus, dt) {
+    st.timer -= dt;
+    const cp = RACE_POINTS[st.raceIndex];
+    if (near(focus, cp, 14)) {
+      st.raceIndex += 1;
+      if (G.audio) G.audio.pickup();
+      engine.updateMarker();
+      if (st.raceIndex >= RACE_POINTS.length) { engine.advanceStep(); return; }
+    }
+    G.missionText = step.text + ' — checkpoint ' + (st.raceIndex + 1) + '/' + RACE_POINTS.length + ' (' + Math.max(0, Math.ceil(st.timer)) + 's)';
+    if (st.timer <= 0) engine.failMission('Out of time in the race.');
+  },
+  choice(G, engine) {
+    engine.choiceOpen = true;
+    G.openChoice();
+  },
+};
+
+// One setup per side mission id.
+const SIDE_SETUP = {
+  taxi(G, engine, st, place) {
+    st.phase = 0;
+    st.target = { x: place.x + 40, z: place.z - 60 };
+    G.toast('Taxi: pick up the fare at the marker.');
+  },
+  race(G, engine, st) {
+    st.checkpoints = RACE_POINTS.slice(0, 5);
+    st.timer = 150;
+    G.toast('Race: hit all 5 checkpoints!');
+  },
+  timetrial(G, engine, st) {
+    st.checkpoints = RACE_POINTS.slice(0, 5);
+    st.timer = 90;
+    G.toast('Race: hit all 5 checkpoints!');
+  },
+  delivery(G, engine, st) {
+    st.checkpoints = [{ x: 160, z: -40 }, { x: -320, z: 220 }, { x: 420, z: 120 }];
+    st.timer = 180;
+  },
+  escape(G) {
+    G.addWanted(3);
+  },
+  packages(G, engine, st) {
+    for (let i = 0; i < 8; i += 1) st.packages.push({ x: (Math.random() - 0.5) * 900, z: (Math.random() - 0.5) * 900, taken: false });
+  },
+  territory(G) {
+    for (let i = 0; i < 5; i += 1) spawnEnemy(G, PLACES.gangHQ.x + (Math.random() - 0.5) * 30, PLACES.gangHQ.z + (Math.random() - 0.5) * 30, { bounty: 200 });
+  },
+  rescue(G, engine, st, place) {
+    // The hurt civilian waits at the hospital entrance, 35 units east of the
+    // building; pick them up on foot, then drive them to the front door.
+    st.target = { x: place.x + 35, z: place.z + 15 };
+    st.phase = 0;
+    spawnEnemy(G, st.target.x, st.target.z, { color: 0x2ecc71, health: 50, bounty: 0, passive: true });
+    G.toast('Rescue: reach the hurt civilian, then drive them to the hospital.');
+  },
+};
 
 export function createMissionEngine(G) {
   const engine = {
@@ -217,67 +316,12 @@ export function createMissionEngine(G) {
       G.missionText = 'Mission failed — press M to retry: ' + (m ? m.title : '');
     },
 
-    // One step type per small handler, so update() is a dispatch table.
-    stepHandlers: {
-      goto(G, engine, step, st, focus) {
-        const target = engine.stepTarget();
-        if (target && Math.hypot(focus.x - target.x, focus.z - target.z) < 10) engine.advanceStep();
-      },
-      drive(G, engine, step, st, focus) {
-        const target = engine.stepTarget();
-        if (!target || Math.hypot(focus.x - target.x, focus.z - target.z) >= 12) return;
-        if (G.currentVehicle) engine.advanceStep();
-        else G.missionText = step.text + ' (you need a car!)';
-      },
-      kill(G, engine, step, st) {
-        const alive = G.enemies.filter((e) => e.alive).length;
-        st.kills = step.count - alive;
-        G.missionText = step.text + ' (' + Math.max(0, st.kills) + '/' + step.count + ')';
-        if (alive === 0) engine.advanceStep();
-      },
-      collect(G, engine, step, st, focus) {
-        for (const c of st.collectibles) {
-          if (!c.taken && Math.hypot(focus.x - c.x, focus.z - c.z) < 4) {
-            c.taken = true;
-            st.collected += 1;
-            if (G.audio) G.audio.pickup();
-            G.toast('Collected ' + st.collected + '/' + step.count);
-            engine.updateMarker();
-          }
-        }
-        G.missionText = step.text + ' (' + st.collected + '/' + step.count + ')';
-        if (st.collected >= step.count) engine.advanceStep();
-      },
-      escape(G, engine, step, st, focus, dt) {
-        st.timer += dt;
-        if (G.wanted === 0 && st.timer > 3) engine.advanceStep();
-        else G.missionText = step.text + ' — wanted ' + G.wanted + '★ (' + Math.floor(st.timer) + 's)';
-        if (st.timer > 120) engine.failMission('The police never lost you.');
-      },
-      race(G, engine, step, st, focus, dt) {
-        st.timer -= dt;
-        const cp = RACE_POINTS[st.raceIndex];
-        if (cp && Math.hypot(focus.x - cp.x, focus.z - cp.z) < 14) {
-          st.raceIndex += 1;
-          if (G.audio) G.audio.pickup();
-          engine.updateMarker();
-          if (st.raceIndex >= RACE_POINTS.length) { engine.advanceStep(); return; }
-        }
-        G.missionText = step.text + ' — checkpoint ' + (st.raceIndex + 1) + '/' + RACE_POINTS.length + ' (' + Math.max(0, Math.ceil(st.timer)) + 's)';
-        if (st.timer <= 0) engine.failMission('Out of time in the race.');
-      },
-      choice(G, engine) {
-        engine.choiceOpen = true;
-        G.openChoice();
-      },
-    },
-
     update(dt) {
       if (!engine.active) return;
       const step = engine.currentStep();
       if (!step) return;
-      const handler = engine.stepHandlers[step.type] || engine.stepHandlers.goto;
-      handler(G, engine, step, engine.stepState, playerFocus(G), dt);
+      const handler = STEP_HANDLERS[step.type] || STEP_HANDLERS.goto;
+      handler(G, engine, step, engine.stepState, focusOf(G), dt);
     },
 
     // Side missions: started at their marker, same step engine, smaller scope.
@@ -287,41 +331,17 @@ export function createMissionEngine(G) {
       engine.side = def;
       const place = PLACES[def.place];
       engine.sideState = { timer: 0, progress: 0, target: null, phase: 0, checkpoints: [], packages: [] };
-      const st = engine.sideState;
-      if (id === 'taxi') {
-        st.phase = 0;
-        st.target = { x: place.x + 40, z: place.z - 60 };
-        G.toast('Taxi: pick up the fare at the marker.');
-      } else if (id === 'race' || id === 'timetrial') {
-        st.checkpoints = RACE_POINTS.slice(0, 5);
-        st.timer = id === 'timetrial' ? 90 : 150;
-        G.toast('Race: hit all 5 checkpoints!');
-      } else if (id === 'delivery') {
-        st.checkpoints = [{ x: 160, z: -40 }, { x: -320, z: 220 }, { x: 420, z: 120 }];
-        st.timer = 180;
-      } else if (id === 'escape') {
-        G.addWanted(3);
-      } else if (id === 'packages') {
-        for (let i = 0; i < 8; i += 1) st.packages.push({ x: (Math.random() - 0.5) * 900, z: (Math.random() - 0.5) * 900, taken: false });
-      } else if (id === 'territory') {
-        for (let i = 0; i < 5; i += 1) spawnEnemy(G, PLACES.gangHQ.x + (Math.random() - 0.5) * 30, PLACES.gangHQ.z + (Math.random() - 0.5) * 30, { bounty: 200 });
-      } else if (id === 'rescue') {
-        // The hurt civilian waits at the hospital entrance, 35 units east of the
-        // building; pick them up on foot, then drive them to the front door.
-        st.target = { x: place.x + 35, z: place.z + 15 };
-        st.phase = 0;
-        spawnEnemy(G, st.target.x, st.target.z, { color: 0x2ecc71, health: 50, bounty: 0, passive: true });
-        G.toast('Rescue: reach the hurt civilian, then drive them to the hospital.');
-      }
+      const setup = SIDE_SETUP[id];
+      if (setup) setup(G, engine, engine.sideState, place);
       G.missionText = 'Side mission: ' + def.name;
-      G.sideTarget = st.target || st.checkpoints?.[0] || null;
+      G.sideTarget = engine.sideState.target || engine.sideState.checkpoints?.[0] || null;
     },
 
     updateSide(dt) {
       const def = engine.side;
       if (!def) return;
       const st = engine.sideState;
-      const focus = playerFocus(G);
+      const focus = focusOf(G);
       const finish = (bonus) => {
         G.money += def.reward + (bonus || 0);
         G.rep += 10;
@@ -334,17 +354,17 @@ export function createMissionEngine(G) {
         G.saveGame();
       };
       if (def.id === 'taxi') {
-        if (st.phase === 0 && st.target && Math.hypot(focus.x - st.target.x, focus.z - st.target.z) < 8) {
+        if (st.phase === 0 && near(focus, st.target, 8)) {
           st.phase = 1;
           st.target = { x: 160, z: 200 };
           G.sideTarget = st.target;
           G.toast('Fare picked up! Drive them to Downtown.');
-        } else if (st.phase === 1 && st.target && Math.hypot(focus.x - st.target.x, focus.z - st.target.z) < 10) finish(0);
+        } else if (st.phase === 1 && near(focus, st.target, 10)) finish(0);
       } else if (def.id === 'race' || def.id === 'timetrial' || def.id === 'delivery') {
         st.timer -= dt;
         const cp = st.checkpoints[st.progress];
         G.sideTarget = cp || null;
-        if (cp && Math.hypot(focus.x - cp.x, focus.z - cp.z) < 14) {
+        if (near(focus, cp, 14)) {
           st.progress += 1;
           if (G.audio) G.audio.pickup();
           if (st.progress >= st.checkpoints.length) finish(Math.max(0, Math.floor(st.timer)) * 2);
@@ -355,7 +375,7 @@ export function createMissionEngine(G) {
         if (G.wanted === 0) finish(0);
       } else if (def.id === 'packages') {
         for (const p of st.packages) {
-          if (!p.taken && Math.hypot(focus.x - p.x, focus.z - p.z) < 4) {
+          if (!p.taken && near(focus, p, 4)) {
             p.taken = true;
             st.progress += 1;
             if (G.audio) G.audio.pickup();
@@ -369,11 +389,11 @@ export function createMissionEngine(G) {
       } else if (def.id === 'rescue') {
         // Phase 0: walk to the civilian at the entrance. Phase 1: in a car,
         // drive them to the hospital front door.
-        if (st.phase === 0 && st.target && Math.hypot(focus.x - st.target.x, focus.z - st.target.z) < 6) {
+        if (st.phase === 0 && near(focus, st.target, 6)) {
           st.phase = 1;
           G.sideTarget = PLACES.hospital;
           G.toast('Civilian picked up! Drive to Bay General Hospital.');
-        } else if (st.phase === 1 && G.currentVehicle && Math.hypot(focus.x - PLACES.hospital.x, focus.z - PLACES.hospital.z) < 12) {
+        } else if (st.phase === 1 && G.currentVehicle && near(focus, PLACES.hospital, 12)) {
           finish(0);
         }
       }

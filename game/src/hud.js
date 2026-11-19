@@ -4,7 +4,7 @@
 // minimap drawn on a 2D canvas every frame. The DOM is only rewritten when
 // a value actually changes, so the HUD costs almost nothing per frame. The
 // wanted stars flash while the heat is fresh (G.crimeFlash), so a new star
-// is impossible to miss. Round 2: the DOM sync is one small setter per
+// is impossible to miss. Round 3: the DOM sync is one small setter per
 // field, and the minimap layers are drawn in order: districts, roads, sea,
 // markers, then the player arrow.
 import { DISTRICTS } from './config.js';
@@ -24,7 +24,7 @@ export function createHud(G) {
   const scale = MINIMAP_SIZE / 1000;
   const toMap = (v) => (v + 500) * scale;
 
-  function drawDistricts() {
+  function paintDistricts() {
     for (const d of DISTRICTS) {
       if (d.id === 'highway') continue;
       const fill = d.id === 'beach' ? '#c9ae72' : d.id === 'port' ? '#6b5d4f' : d.id === 'airport' ? '#3a3f44' : '#2c3a2e';
@@ -33,7 +33,7 @@ export function createHud(G) {
     }
   }
 
-  function drawRoads() {
+  function paintRoads() {
     mctx.strokeStyle = '#5a6068';
     mctx.lineWidth = 2;
     for (let c = -400; c <= 400; c += 100) {
@@ -52,7 +52,7 @@ export function createHud(G) {
     mctx.fill();
   }
 
-  function drawMarkers() {
+  function paintMarkers() {
     // Mission marker pulses: a yellow ring around the gold dot.
     if (G.missionTarget) {
       const pulse = 5 + Math.sin(G.time * 6) * 2.5;
@@ -68,7 +68,7 @@ export function createHud(G) {
     for (const e of G.enemies) if (e.alive) dot(e.x, e.z, '#ff3b30', 3);
   }
 
-  function drawPlayerArrow() {
+  function paintPlayerArrow() {
     const focus = G.currentVehicle || G.player;
     mctx.save();
     mctx.translate(toMap(focus.x), toMap(focus.z));
@@ -90,10 +90,10 @@ export function createHud(G) {
     mctx.clearRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
     mctx.fillStyle = 'rgba(10, 16, 24, 0.85)';
     mctx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
-    drawDistricts();
-    drawRoads();
-    drawMarkers();
-    drawPlayerArrow();
+    paintDistricts();
+    paintRoads();
+    paintMarkers();
+    paintPlayerArrow();
   }
 
   function compassOf() {
@@ -119,14 +119,14 @@ export function createHud(G) {
     const speed = G.currentVehicle ? Math.abs(G.currentVehicle.speed) * 3.6 : G.player.speed * 3.6;
     const stars = '★'.repeat(G.wanted) + '☆'.repeat(5 - G.wanted);
     const compass = compassOf();
-    const district = G.currentDistrict ? G.currentDistrict.name : 'Vice Bay';
+    const districtName = G.currentDistrict ? G.currentDistrict.name : 'Vice Bay';
     const objective = objectiveText();
     const flashing = G.crimeFlash > 0 && G.wanted > 0;
     const weapon = G.combat ? G.combat.weapon : '';
     const ammo = G.combat ? (G.combat.ammo[G.combat.weapon] ?? '∞') : '';
     const state = [
       G.player.health, Math.floor(G.money), G.rep, stars, Math.round(speed),
-      compass, district, objective, G.currentVehicle ? G.currentVehicle.type.name : 'On foot',
+      compass, districtName, objective, G.currentVehicle ? G.currentVehicle.type.name : 'On foot',
       weapon, ammo, G.interactPrompt || '', flashing ? 'flash' : '',
     ].join('|');
     if (state !== lastState) {
@@ -143,7 +143,7 @@ export function createHud(G) {
       starsEl.style.color = G.wanted > 0 ? '#ffd23f' : '#888';
       starsEl.classList.toggle('flash', flashing);
       setText('speed', Math.round(speed) + ' km/h');
-      setText('compass', compass + ' · ' + district);
+      setText('compass', compass + ' · ' + districtName);
       setText('objective', objective);
       setText('vehicle-name', G.currentVehicle
         ? G.currentVehicle.type.name + (G.currentVehicle.health < 100 ? ' — ' + Math.max(0, Math.ceil(G.currentVehicle.health)) + '%' : '')

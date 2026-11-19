@@ -3,8 +3,9 @@
 // files and makes no network requests. The AudioContext is created lazily
 // on the first user gesture (unlock), because browsers refuse to start
 // audio before one. A short two-note sting plays when a wanted star lands.
-// Internally the module is three small builders — tone(), noise() and a
-// looping voice — plus a table of one-shot effects on top of them.
+// Inside, the module is two small builders — tone() for pitched blips and
+// noise() for bursts — plus a looping-voice helper for the engine hum and
+// the siren wail, and a table of one-shot effects on top of them.
 export function createAudio() {
   let ctx = null;
   let master = null;
@@ -52,7 +53,7 @@ export function createAudio() {
     }
   }
 
-  function noise(duration, filterFreq, gainValue, type = 'bandpass') {
+  function noiseBurst(duration, filterFreq, gainValue, type = 'bandpass') {
     if (!ensure() || muted) return;
     const len = Math.max(1, Math.floor(ctx.sampleRate * duration));
     const buffer = ctx.createBuffer(1, len, ctx.sampleRate);
@@ -87,8 +88,8 @@ export function createAudio() {
     osc.stop(start + duration + 0.02);
   }
 
-  function arpeggio(notes, step, type, gainValue, noteLen) {
-    notes.forEach((f, i) => tone(f, noteLen, type, gainValue, null, (i * step) / 1000));
+  function playNotes(notes, stepMs, type, gainValue, noteLen) {
+    notes.forEach((f, i) => tone(f, noteLen, type, gainValue, null, (i * stepMs) / 1000));
   }
 
   return {
@@ -108,17 +109,17 @@ export function createAudio() {
       sirenVoice.out.gain.setTargetAtTime(on ? 0.03 + wanted * 0.008 : 0, t, 0.2);
       if (on) sirenVoice.osc.frequency.setTargetAtTime(650 + Math.sin(t * 2.2) * 220, t, 0.05);
     },
-    skid() { noise(0.18, 900, 0.22, 'highpass'); },
-    gunshot() { noise(0.14, 1800, 0.5); tone(160, 0.1, 'square', 0.25, 60); },
-    punch() { noise(0.08, 300, 0.45, 'lowpass'); },
-    crash() { noise(0.3, 500, 0.6, 'lowpass'); tone(90, 0.25, 'sine', 0.4, 40); },
-    pickup() { arpeggio([660, 990], 90, 'sine', 0.3, 0.14); },
-    missionDone() { arpeggio([523, 659, 784, 1046], 110, 'triangle', 0.3, 0.22); },
+    skid() { noiseBurst(0.18, 900, 0.22, 'highpass'); },
+    gunshot() { noiseBurst(0.14, 1800, 0.5); tone(160, 0.1, 'square', 0.25, 60); },
+    punch() { noiseBurst(0.08, 300, 0.45, 'lowpass'); },
+    crash() { noiseBurst(0.3, 500, 0.6, 'lowpass'); tone(90, 0.25, 'sine', 0.4, 40); },
+    pickup() { playNotes([660, 990], 90, 'sine', 0.3, 0.14); },
+    missionDone() { playNotes([523, 659, 784, 1046], 110, 'triangle', 0.3, 0.22); },
     missionFail() { tone(220, 0.4, 'sawtooth', 0.25, 110); },
     horn() { tone(370, 0.25, 'square', 0.18); tone(466, 0.25, 'square', 0.15); },
     click() { tone(800, 0.05, 'square', 0.12); },
-    cash() { arpeggio([1200, 1500], 70, 'sine', 0.25, 0.1); },
+    cash() { playNotes([1200, 1500], 70, 'sine', 0.25, 0.1); },
     // Short two-note sting when a new wanted star lands — the heat just went up.
-    wantedSting() { arpeggio([392, 311], 130, 'square', 0.2, 0.18); },
+    wantedSting() { playNotes([392, 311], 130, 'square', 0.2, 0.18); },
   };
 }

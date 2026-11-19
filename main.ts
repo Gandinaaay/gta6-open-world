@@ -1,4 +1,6 @@
 // Vice Bay: Blood & Destiny — make.fun gta6-01 entry (by @gandinaaay).
+// Round 3: the entrypoint is re-authored in the recorded session, same
+// behaviour — copy game/ + screenshots/ and write dossier.json.
 //
 // The game lives in this directory's game/ folder: plain static files a
 // desktop browser loads offline — game/index.html plus its ES modules, with

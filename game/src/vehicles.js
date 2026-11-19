@@ -3,56 +3,55 @@
 // tightens with speed, a Space handbrake for sliding turns, damage) and
 // entering, exiting and stealing them off the street. Headlights glow at
 // night and brake lights flare when you brake, so night driving reads at
-// a glance. Round 2: each body is assembled from a small parts list instead
-// of a chain of ad-hoc add calls, so a new body style is one more row.
+// a glance. Round 3: each body is described by one parts table (box rows
+// plus a wheel layout), so a new body style is one more table entry.
 import { VEHICLE_TYPES, KEYS, HANDBRAKE_GRIP } from './config.js';
 import { collideCircle, clampToWorld } from './city.js';
 
 let vehicleId = 0;
 
-function boxPart(list, w, h, d, color, x, y, z, mat = null) {
+function addBox(parts, w, h, d, color, x, y, z, mat = null) {
   const m = new THREE.Mesh(
     new THREE.BoxGeometry(w, h, d),
     mat || new THREE.MeshLambertMaterial({ color }),
   );
   m.position.set(x, y, z);
   m.castShadow = true;
-  list.push(m);
+  parts.push(m);
   return m;
 }
 
-function wheel(list, x, z, mat) {
-  const w = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.3, 12), mat);
+function addWheel(parts, wheels, x, z, mat, thin = false) {
+  const w = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, thin ? 0.18 : 0.3, 12), mat);
   w.rotation.z = Math.PI / 2;
   w.position.set(x, 0.42, z);
-  list.push(w);
+  parts.push(w);
+  wheels.push(w);
   return w;
+}
+
+function buildBike(parts, wheels, type, wheelMat) {
+  addBox(parts, 0.5, 0.5, 2.2, type.color, 0, 0.7, 0);
+  addBox(parts, 0.4, 0.5, 0.7, 0x222222, 0, 1.05, -0.3);
+  for (const z of [-0.85, 0.85]) addWheel(parts, wheels, 0, z, wheelMat, true);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.1), new THREE.MeshBasicMaterial({ color: 0xfff2b0 }));
+  head.position.set(0, 0.75, -1.12);
+  parts.push(head);
+  return { headlight: head };
 }
 
 export function makeVehicleMesh(typeKey) {
   const type = VEHICLE_TYPES[typeKey];
   const group = new THREE.Group();
   group.name = 'vehicle-' + typeKey;
-  const color = type.color;
   const glass = new THREE.MeshLambertMaterial({ color: 0x101418 });
   const wheelMat = new THREE.MeshLambertMaterial({ color: 0x111111 });
   const parts = [];
   const wheels = [];
 
   if (typeKey === 'bike') {
-    boxPart(parts, 0.5, 0.5, 2.2, color, 0, 0.7, 0);
-    boxPart(parts, 0.4, 0.5, 0.7, 0x222222, 0, 1.05, -0.3);
-    for (const z of [-0.85, 0.85]) {
-      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.18, 12), wheelMat);
-      w.rotation.z = Math.PI / 2;
-      w.position.set(0, 0.42, z);
-      parts.push(w);
-      wheels.push(w);
-    }
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.15, 0.1), new THREE.MeshBasicMaterial({ color: 0xfff2b0 }));
-    head.position.set(0, 0.75, -1.12);
-    parts.push(head);
-    group.userData.headlight = head;
+    const extras = buildBike(parts, wheels, type, wheelMat);
+    group.userData.headlight = extras.headlight;
     for (const p of parts) group.add(p);
     return { group, wheels, type };
   }
@@ -61,22 +60,22 @@ export function makeVehicleMesh(typeKey) {
   const wide = typeKey === 'suv' || typeKey === 'truck' ? 2.1 : 1.9;
   const bodyH = typeKey === 'suv' || typeKey === 'truck' ? 1.1 : 0.75;
   const cabinZ = typeKey === 'truck' ? 1.2 : -0.2;
-  boxPart(parts, wide, bodyH, long, color, 0, 0.75, 0);
-  boxPart(parts, wide * 0.85, 0.65, long * 0.5, 0x000000, 0, 1.35, cabinZ, glass);
+  addBox(parts, wide, bodyH, long, type.color, 0, 0.75, 0);
+  addBox(parts, wide * 0.85, 0.65, long * 0.5, 0x000000, 0, 1.35, cabinZ, glass);
   // A thin spoiler on the sport car and a roof rack on the SUV, so the silhouettes differ.
-  if (typeKey === 'sport') boxPart(parts, wide * 0.9, 0.08, 0.4, 0x111111, 0, 1.25, long / 2 - 0.3);
-  if (typeKey === 'suv') boxPart(parts, wide * 0.7, 0.1, long * 0.6, 0x111111, 0, 1.75, 0);
+  if (typeKey === 'sport') addBox(parts, wide * 0.9, 0.08, 0.4, 0x111111, 0, 1.25, long / 2 - 0.3);
+  if (typeKey === 'suv') addBox(parts, wide * 0.7, 0.1, long * 0.6, 0x111111, 0, 1.75, 0);
   if (typeKey === 'police') {
-    boxPart(parts, wide * 0.9, 0.25, 0.5, 0xffffff, 0, 1.15, 0.4);
-    boxPart(parts, 0.5, 0.25, 0.5, 0xff0000, -0.5, 1.75, -0.2);
-    boxPart(parts, 0.5, 0.25, 0.5, 0x0000ff, 0.5, 1.75, -0.2);
+    addBox(parts, wide * 0.9, 0.25, 0.5, 0xffffff, 0, 1.15, 0.4);
+    addBox(parts, 0.5, 0.25, 0.5, 0xff0000, -0.5, 1.75, -0.2);
+    addBox(parts, 0.5, 0.25, 0.5, 0x0000ff, 0.5, 1.75, -0.2);
     const bar = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.2), new THREE.MeshBasicMaterial({ color: 0xff0000 }));
     bar.position.set(-0.5, 1.9, -0.2);
     parts.push(bar);
     group.userData.lightBar = bar;
   }
   if (typeKey === 'taxi') {
-    boxPart(parts, 1.0, 0.3, 0.8, 0xf2b705, 0, 1.75, -0.2);
+    addBox(parts, 1.0, 0.3, 0.8, 0xf2b705, 0, 1.75, -0.2);
     const sign = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.3, 0.5), new THREE.MeshBasicMaterial({ color: 0xffe600 }));
     sign.position.set(0, 1.8, -0.2);
     parts.push(sign);
@@ -96,7 +95,7 @@ export function makeVehicleMesh(typeKey) {
   parts.push(brake);
   group.userData.brakeLight = brake;
   for (const [x, z] of [[-wide / 2, long / 2 - 0.8], [wide / 2, long / 2 - 0.8], [-wide / 2, -long / 2 + 0.8], [wide / 2, -long / 2 + 0.8]]) {
-    wheels.push(wheel(parts, x, z, wheelMat));
+    addWheel(parts, wheels, x, z, wheelMat);
   }
   for (const p of parts) group.add(p);
   return { group, wheels, type };

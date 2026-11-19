@@ -7,8 +7,8 @@
 // &seed=N) stages that scene instead of running the loop, paints it a few
 // times and sets window.__shotReady for a screenshot. The title camera
 // drifts slowly around the hero, so the menu sits over a living city instead
-// of a frozen frame. Round 2: screens are one table, and the frame loop is
-// split into an action step and a simulation step.
+// of a frozen frame. Round 3: the screens are one table (panel per screen),
+// and the frame loop is split into an action step and a simulation step.
 import { STEP } from './config.js';
 import { createRandom } from './random.js';
 import { createGame } from './world.js';
@@ -38,6 +38,14 @@ window.__game = G; // debug hook: lets a test driver inspect the live game state
 const input = createInput(G);
 const hudRoot = document.getElementById('hud');
 
+// Screen name -> the panel it shows ('' means no panel, just the HUD).
+const SCREEN_PANELS = {
+  title: 'menu',
+  paused: 'pause',
+  missions: 'missions',
+  shop: 'shop',
+  choice: 'choice',
+};
 const PANEL_IDS = ['menu', 'pause', 'missions', 'shop', 'choice'];
 
 function showPanel(id, on) {
@@ -46,11 +54,7 @@ function showPanel(id, on) {
 
 function showScreen(name) {
   G.screen = name;
-  showPanel('menu', name === 'title');
-  showPanel('pause', name === 'paused');
-  showPanel('missions', name === 'missions');
-  showPanel('shop', name === 'shop');
-  showPanel('choice', name === 'choice');
+  for (const id of PANEL_IDS) showPanel(id, SCREEN_PANELS[name] === id);
   hudRoot.style.display = name === 'title' ? 'none' : '';
   if (name === 'title') {
     document.getElementById('continue-btn').style.display = G.hadSave ? '' : 'none';

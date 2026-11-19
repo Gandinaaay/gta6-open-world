@@ -37,5 +37,6 @@ Reproducible screenshots: open `?shot=start|play|chase|night&seed=1` — each st
 - Three.js r149 vendored locally as `game/vendor/three.min.js` (no CDN, no network at runtime).
 - Plain static files under `game/` — no build step. `main.ts` (Node 22, standard library only) copies `game/` and `screenshots/` to `/output` and writes `dossier.json` via the vendored make.fun library.
 - All art, textures and sound are generated in code at runtime.
+- Round 3 rebuild: every file re-authored in the recorded build session.
 
 Made by [@gandinaaay](https://github.com/Gandinaaay) for the Make GTA 6 bounty.
