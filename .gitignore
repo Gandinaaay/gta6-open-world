@@ -1,9 +1,4 @@
-# Build output from main.ts — the dossier is regenerated on every build,
-# so it is never committed.
 out/
 out2/
-# Round 3: build dirs stay out of the repo; nothing else is ignored.
-
-# Editor and OS clutter.
+node_modules/
 .DS_Store
-*.swp

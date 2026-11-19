@@ -1,153 +1,79 @@
 <!DOCTYPE html>
-<!-- Vice Bay: Blood & Destiny — round 3 rebuild, all files re-authored in
-     the recorded session. Same game, same screens, fresh write of every line. -->
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vice Bay: Blood &amp; Destiny</title>
 <style>
-  :root { --panel: rgba(8, 12, 18, 0.85); --line: #2a3644; --gold: #ffd23f; --teal: #2ec4b6; }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a0e14; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #fff; }
-  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
-  .hidden { display: none !important; }
-  /* ---------- HUD ---------- */
-  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
-  #stats { position: absolute; top: 14px; left: 14px; display: flex; flex-direction: column; gap: 6px; }
-  .chip { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 14px; font-weight: 600; width: max-content; }
-  #health-wrap { display: flex; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
-  #health-bar { width: 150px; height: 12px; background: #222; border-radius: 6px; overflow: hidden; }
-  #health-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #27ae60, #2ecc71); transition: width .2s; }
-  #stars { font-size: 22px; letter-spacing: 2px; }
-  #stars.flash { animation: blink .4s steps(2) infinite; }
-  @keyframes blink { 50% { opacity: .25; } }
-  #objective { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; font-size: 14px; max-width: 46vw; text-align: center; }
-  #clock { position: absolute; top: 14px; right: 14px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-  #minimap { border: 2px solid var(--line); border-radius: 10px; background: rgba(10, 16, 24, .9); }
-  #drive { position: absolute; bottom: 16px; right: 16px; text-align: right; display: flex; flex-direction: column; gap: 4px; align-items: flex-end; }
-  #speed { font-size: 30px; font-weight: 800; text-shadow: 0 2px 6px #000; }
-  #interact { position: absolute; bottom: 100px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid var(--gold); color: var(--gold); border-radius: 8px; padding: 8px 14px; font-size: 15px; font-weight: 700; }
-  #interact:empty { display: none; }
-  #controls { position: absolute; bottom: 14px; left: 14px; font-size: 12px; opacity: .75; line-height: 1.6; text-shadow: 0 1px 3px #000; }
-  /* ---------- panels ---------- */
-  .panel { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; z-index: 30; background: rgba(0, 0, 0, .45); }
-  .panel.show { display: flex; }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 28px 32px; width: min(560px, 92vw); max-height: 86vh; overflow-y: auto; backdrop-filter: blur(6px); }
-  .card h1 { font-size: 34px; letter-spacing: 1px; margin-bottom: 4px; }
-  .card h1 .vice { color: var(--gold); }
-  .card h2 { font-size: 24px; margin-bottom: 10px; }
-  .tagline { color: #9fb3c8; margin-bottom: 18px; font-size: 15px; line-height: 1.5; }
-  .panel-sub { color: #9fb3c8; font-size: 13px; margin: 14px 0 6px; }
-  .btn { display: block; width: 100%; padding: 12px; margin-top: 10px; font-size: 16px; font-weight: 700; color: #111; background: var(--gold); border: none; border-radius: 9px; cursor: pointer; }
-  .btn:hover { filter: brightness(1.1); }
-  .btn.ghost { background: transparent; color: #fff; border: 1px solid var(--line); }
-  .btn.danger { background: #e74c3c; color: #fff; }
-  .btn:disabled { opacity: .45; cursor: default; }
-  .shop-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 9px 2px; border-bottom: 1px solid #1e2833; font-size: 14px; }
-  .shop-row button { padding: 7px 14px; font-weight: 700; border-radius: 7px; border: none; background: var(--teal); color: #06281f; cursor: pointer; white-space: nowrap; }
-  .shop-row button:disabled { opacity: .4; cursor: default; }
-  .field { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 12px; font-size: 14px; }
-  .field input[type=range] { flex: 1; }
-  #settings { display: none; }
-  #settings.show { display: block; }
-  /* ---------- briefing / toast ---------- */
-  #briefing { position: fixed; top: 70px; left: 50%; transform: translateX(-50%); z-index: 20; background: var(--panel); border: 1px solid var(--gold); border-radius: 10px; padding: 12px 18px; max-width: 560px; text-align: center; display: none; }
-  #briefing.show { display: block; }
-  #briefing-title { font-size: 18px; font-weight: 800; color: var(--gold); margin-bottom: 4px; }
-  #briefing-text { font-size: 14px; color: #d7e2ec; line-height: 1.5; }
-  #toast { position: fixed; bottom: 150px; left: 50%; transform: translateX(-50%); z-index: 20; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 9px 16px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; }
-  #toast.show { opacity: 1; }
-  #status { position: fixed; bottom: 4px; right: 8px; z-index: 5; font-size: 11px; color: rgba(255, 255, 255, .55); }
-  #err { position: fixed; top: 4px; left: 8px; z-index: 40; font-size: 12px; color: #ff6b6b; max-width: 80vw; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0a0e18; font-family: Arial, Helvetica, sans-serif; color: #fff; }
+  #app { position: fixed; inset: 0; }
+  #app canvas { display: block; }
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
+  .panel { background: rgba(8, 12, 20, 0.72); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 8px 12px; }
+  #stats { position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 6px; min-width: 210px; }
+  #health-bar { width: 180px; height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; overflow: hidden; }
+  #health-fill { height: 100%; width: 100%; background: #2ecc71; }
+  #stars { color: #ffd23e; font-size: 20px; letter-spacing: 2px; }
+  #money { font-size: 20px; font-weight: bold; color: #7dff9a; }
+  #rep { font-size: 13px; color: #9db8d8; }
+  #speed { position: absolute; right: 16px; bottom: 16px; font-size: 26px; font-weight: bold; }
+  #compass { position: absolute; top: 12px; right: 12px; font-size: 14px; }
+  #objective { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 15px; text-align: center; max-width: 46%; }
+  #msg { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); font-size: 17px; color: #ffd23e; text-shadow: 0 1px 3px #000; transition: opacity 0.5s; }
+  #minimap { position: absolute; right: 16px; bottom: 64px; border: 2px solid rgba(255,255,255,0.35); border-radius: 50%; background: rgba(8,12,20,0.85); }
+  #help { position: absolute; left: 12px; bottom: 12px; font-size: 12px; color: rgba(255,255,255,0.75); }
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; text-align: center; }
+  #title { background: linear-gradient(rgba(10,6,24,0.25), rgba(10,6,24,0.55)); }
+  #title h1 { font-size: 54px; margin: 0; color: #ff5ec4; text-shadow: 0 0 24px #ff2fb3, 0 2px 0 #000; letter-spacing: 2px; }
+  #title h2 { font-size: 20px; margin: 6px 0 24px; color: #7df0ff; text-shadow: 0 0 12px #37e0ff; letter-spacing: 6px; }
+  #title p { color: #ddd; max-width: 560px; line-height: 1.5; }
+  .btn { pointer-events: auto; cursor: pointer; background: #ff2fb3; color: #fff; border: none; border-radius: 8px; padding: 12px 28px; font-size: 18px; font-weight: bold; margin: 6px; }
+  .btn:hover { background: #ff5ec4; }
+  .btn.secondary { background: #2f6fb2; }
+  #pause, #missions { background: rgba(5, 8, 16, 0.82); display: none; }
+  #pause h1, #missions h1 { font-size: 36px; margin-bottom: 10px; }
+  #mission-list { max-height: 60vh; overflow-y: auto; width: 520px; }
+  .mission-row { pointer-events: auto; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 9px 12px; margin: 5px 0; text-align: left; font-size: 14px; }
+  .mission-row:hover { background: rgba(255,255,255,0.18); }
+  .mission-row.done { opacity: 0.55; }
 </style>
 </head>
 <body>
-<canvas id="game"></canvas>
-<div id="err"></div>
-
+<div id="app"></div>
 <div id="hud">
-  <div id="stats">
-    <div id="health-wrap"><span>❤</span><div id="health-bar"><div id="health-fill"></div></div><span id="health-num">100</span></div>
-    <div class="chip" id="money">$500</div>
-    <div class="chip" id="rep">REP 0</div>
-    <div class="chip" id="stars">☆☆☆☆☆</div>
+  <div id="stats" class="panel">
+    <div id="health-bar"><div id="health-fill"></div></div>
+    <div id="money">$500</div>
+    <div id="rep">REP 0</div>
+    <div id="stars">☆☆☆☆☆</div>
   </div>
-  <div id="objective">Press M to start Mission 1: Welcome to Vice Bay</div>
-  <div id="clock">
-    <canvas id="minimap" width="190" height="190"></canvas>
-    <div class="chip" id="time">07:40 ☀</div>
-    <div class="chip" id="compass">N · Downtown</div>
-  </div>
-  <div id="drive">
-    <div id="speed">0 km/h</div>
-    <div class="chip" id="vehicle-name">On foot</div>
-    <div class="chip" id="weapon">PISTOL · 120</div>
-  </div>
-  <div id="interact"></div>
-  <div id="controls">WASD drive/walk · F enter/steal car · E interact/shop · 1–5 weapons · Click fire · M missions · Esc pause · Space handbrake · H horn</div>
+  <div id="objective" class="panel">Press NEW GAME to start</div>
+  <div id="compass" class="panel">N 0°</div>
+  <div id="msg"></div>
+  <canvas id="minimap" width="200" height="200"></canvas>
+  <div id="speed"></div>
+  <div id="help">WASD move/drive • E enter/exit car • Space handbrake/jump • Mouse drag camera • Click shoot • 1-5 weapons • R reload • M missions • Esc pause</div>
 </div>
-
-<div id="briefing"><div id="briefing-title"></div><div id="briefing-text"></div></div>
-<div id="toast"></div>
-
-<div class="panel show" id="menu">
-  <div class="card">
-    <h1><span class="vice">VICE BAY</span><br>Blood &amp; Destiny</h1>
-    <p class="tagline">An original open-world crime story. Explore a 2 km × 2 km city on foot and by car, build your reputation, survive the VBPD, and decide the fate of Vice Bay.</p>
-    <p class="tagline" id="save-note">No save yet — New Game starts the story.</p>
-    <button class="btn" id="new-btn">NEW GAME</button>
-    <button class="btn ghost" id="continue-btn" style="display:none">CONTINUE</button>
-    <button class="btn ghost" id="settings-btn">SETTINGS</button>
-    <div id="settings">
-      <label class="field">Volume <input type="range" id="volume" min="0" max="1" step="0.05" value="0.6"></label>
-      <label class="field">Graphics
-        <select id="quality">
-          <option value="high">High</option>
-          <option value="medium">Medium</option>
-          <option value="low">Low</option>
-        </select>
-      </label>
-      <label class="field">Mute <input type="checkbox" id="mute"></label>
-    </div>
+<div id="title" class="overlay">
+  <h1>VICE BAY</h1>
+  <h2>BLOOD &amp; DESTINY</h2>
+  <p>An original open-world crime game. Explore a 2 km coastal city across 8 districts, steal cars, outrun the law, and work your way through 10 story missions and 8 side jobs. The city remembers every choice.</p>
+  <div>
+    <button id="btn-new" class="btn">NEW GAME</button>
+    <button id="btn-continue" class="btn secondary" style="display:none">CONTINUE</button>
   </div>
+  <p style="font-size:13px">Desktop Chrome • keyboard + mouse • plays offline from static files</p>
 </div>
-
-<div class="panel" id="pause">
-  <div class="card">
-    <h2>Paused</h2>
-    <p class="tagline">Vice Bay waits for no one — except right now.</p>
-    <button class="btn" id="resume-btn">RESUME</button>
-    <button class="btn ghost" id="quit-btn">SAVE &amp; QUIT TO MENU</button>
-  </div>
+<div id="pause" class="overlay">
+  <h1>PAUSED</h1>
+  <button id="btn-resume" class="btn">RESUME</button>
+  <p style="font-size:13px">Esc to resume • M for missions</p>
 </div>
-
-<div class="panel" id="missions">
-  <div class="card">
-    <h2>Missions</h2>
-    <div id="mission-list"></div>
-    <button class="btn ghost" id="missions-close">CLOSE (M)</button>
-  </div>
+<div id="missions" class="overlay">
+  <h1>MISSIONS</h1>
+  <div id="mission-list"></div>
+  <button id="btn-close-missions" class="btn">CLOSE (M / Esc)</button>
 </div>
-
-<div class="panel" id="shop">
-  <div class="card">
-    <h2 id="shop-title">Shop</h2>
-    <div id="shop-items"></div>
-    <button class="btn ghost" id="shop-close">CLOSE</button>
-  </div>
-</div>
-
-<div class="panel" id="choice">
-  <div class="card">
-    <h2>Blood &amp; Destiny</h2>
-    <p class="tagline">Kane is beaten. The ledger is yours. Vice Bay is watching — what do you do?</p>
-    <button class="btn" id="choice-spare">SPARE KANE — turn the ledger over</button>
-    <button class="btn danger" id="choice-take">TAKE THE CITY — Kane is finished</button>
-  </div>
-</div>
-
-<div id="status"></div>
 <script src="vendor/three.min.js"></script>
 <script type="module" src="src/main.js"></script>
 </body>

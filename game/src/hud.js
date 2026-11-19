@@ -1,167 +1,158 @@
-// The HUD: health bar, money, reputation, wanted stars, speed, compass,
-// mission objective with a live distance to the marker, toasts, briefing
-// panel, shop and pause panels — all DOM over the 3D canvas — plus the live
-// minimap drawn on a 2D canvas every frame. The DOM is only rewritten when
-// a value actually changes, so the HUD costs almost nothing per frame. The
-// wanted stars flash while the heat is fresh (G.crimeFlash), so a new star
-// is impossible to miss. Round 3: the DOM sync is one small setter per
-// field, and the minimap layers are drawn in order: districts, roads, sea,
-// markers, then the player arrow.
-import { DISTRICTS } from './config.js';
+// HUD: health/money/rep/stars/speed/compass, message feed, live minimap, mission menu.
+import { CFG } from './config.js';
+import { STORY, SIDE } from './missions.js';
 
-const MINIMAP_SIZE = 190;
-const COMPASS_POINTS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+export class HUD {
+  constructor() {
+    this.el = (id) => document.getElementById(id);
+    this.map = this.el('minimap');
+    this.mapCtx = this.map ? this.map.getContext('2d') : null;
+    this._msgT = 0;
+    this._starFlash = 0;
+    this._lastStars = 0;
+  }
 
-function setText(id, value) {
-  const el = document.getElementById(id);
-  if (el.textContent !== value) el.textContent = value;
-}
+  setHealth(h) {
+    const f = this.el('health-fill');
+    if (f) { f.style.width = Math.max(0, h) + '%'; f.style.background = h > 50 ? '#2ecc71' : h > 25 ? '#f5c518' : '#e74c3c'; }
+  }
 
-export function createHud(G) {
-  const root = document.getElementById('hud');
-  const minimap = document.getElementById('minimap');
-  const mctx = minimap.getContext('2d');
-  const scale = MINIMAP_SIZE / 1000;
-  const toMap = (v) => (v + 500) * scale;
+  setMoney(m) { const e = this.el('money'); if (e) e.textContent = '$' + Math.floor(m).toLocaleString(); }
+  setRep(r) { const e = this.el('rep'); if (e) e.textContent = 'REP ' + Math.floor(r); }
 
-  function paintDistricts() {
-    for (const d of DISTRICTS) {
-      if (d.id === 'highway') continue;
-      const fill = d.id === 'beach' ? '#c9ae72' : d.id === 'port' ? '#6b5d4f' : d.id === 'airport' ? '#3a3f44' : '#2c3a2e';
-      mctx.fillStyle = fill;
-      mctx.fillRect(toMap(d.x0), toMap(d.z0), (d.x1 - d.x0) * scale, (d.z1 - d.z0) * scale);
+  setStars(n) {
+    const e = this.el('stars');
+    if (!e) return;
+    if (n > this._lastStars) this._starFlash = 1.2; // new star: flash + sting handled by main
+    this._lastStars = n;
+    let s = '';
+    for (let i = 0; i < 5; i++) s += i < n ? '★' : '☆';
+    e.textContent = s;
+    e.style.opacity = this._starFlash > 0 ? (0.5 + 0.5 * Math.sin(this._starFlash * 20)) : 1;
+  }
+
+  setSpeed(kmh, inCar) {
+    const e = this.el('speed');
+    if (e) e.textContent = inCar ? Math.round(Math.abs(kmh)) + ' km/h' : '';
+  }
+
+  setCompass(heading) {
+    const e = this.el('compass');
+    if (!e) return;
+    const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    const deg = ((heading * 180 / Math.PI) % 360 + 360) % 360;
+    e.textContent = dirs[Math.round(deg / 45) % 8] + ' ' + Math.round(deg) + '°';
+  }
+
+  setObjective(text) { const e = this.el('objective'); if (e) e.textContent = text; }
+
+  message(text) {
+    const e = this.el('msg');
+    if (!e) return;
+    e.textContent = text;
+    e.style.opacity = 1;
+    this._msgT = 4;
+  }
+
+  update(dt) {
+    if (this._starFlash > 0) this._starFlash -= dt;
+    if (this._msgT > 0) {
+      this._msgT -= dt;
+      if (this._msgT <= 0) {
+        const e = this.el('msg');
+        if (e) e.style.opacity = 0;
+      }
     }
   }
 
-  function paintRoads() {
-    mctx.strokeStyle = '#5a6068';
-    mctx.lineWidth = 2;
-    for (let c = -400; c <= 400; c += 100) {
-      mctx.beginPath(); mctx.moveTo(toMap(c), 0); mctx.lineTo(toMap(c), MINIMAP_SIZE); mctx.stroke();
-      mctx.beginPath(); mctx.moveTo(0, toMap(c)); mctx.lineTo(MINIMAP_SIZE, toMap(c)); mctx.stroke();
+  // Live minimap: roads, player arrow, pulsing objective ring, cops, cars, enemies.
+  drawMinimap(data, time) {
+    const c = this.mapCtx;
+    if (!c) return;
+    const W = this.map.width, H = this.map.height;
+    const scale = W / 500; // show a 500 m window around the player
+    const px = data.player.x, pz = data.player.z;
+    c.fillStyle = 'rgba(8,12,20,0.85)';
+    c.fillRect(0, 0, W, H);
+    c.strokeStyle = 'rgba(140,150,170,0.5)';
+    c.lineWidth = 1;
+    // Road grid (only the streets near the player).
+    for (let s = -900; s <= 900; s += CFG.streetStep) {
+      const sx = W / 2 + (s - px) * scale;
+      const sz = H / 2 + (s - pz) * scale;
+      if (sx >= -10 && sx <= W + 10) { c.beginPath(); c.moveTo(sx, 0); c.lineTo(sx, H); c.stroke(); }
+      if (sz >= -10 && sz <= H + 10) { c.beginPath(); c.moveTo(0, sz); c.lineTo(W, sz); c.stroke(); }
     }
-    // Sea on the east edge.
-    mctx.fillStyle = '#1e6f8e';
-    mctx.fillRect(MINIMAP_SIZE - 10, 0, 20, MINIMAP_SIZE);
-  }
-
-  function dot(x, z, color, r = 4) {
-    mctx.fillStyle = color;
-    mctx.beginPath();
-    mctx.arc(toMap(x), toMap(z), r, 0, Math.PI * 2);
-    mctx.fill();
-  }
-
-  function paintMarkers() {
-    // Mission marker pulses: a yellow ring around the gold dot.
-    if (G.missionTarget) {
-      const pulse = 5 + Math.sin(G.time * 6) * 2.5;
-      mctx.strokeStyle = '#ffd23f';
-      mctx.lineWidth = 2;
-      mctx.beginPath();
-      mctx.arc(toMap(G.missionTarget.x), toMap(G.missionTarget.z), pulse, 0, Math.PI * 2);
-      mctx.stroke();
-      dot(G.missionTarget.x, G.missionTarget.z, '#ffd23f', 5);
+    const toMap = (x, z) => [W / 2 + (x - px) * scale, H / 2 + (z - pz) * scale];
+    // Objective: pulsing ring + distance.
+    if (data.objective) {
+      const [ox, oy] = toMap(data.objective.x, data.objective.z);
+      const pulse = 6 + Math.sin(time * 4) * 3;
+      c.strokeStyle = '#ffd23e';
+      c.lineWidth = 2;
+      c.beginPath(); c.arc(ox, oy, pulse + 6, 0, Math.PI * 2); c.stroke();
+      c.fillStyle = '#ffd23e';
+      c.beginPath(); c.arc(ox, oy, 3, 0, Math.PI * 2); c.fill();
+      if (data.objectiveDist != null) {
+        c.fillStyle = '#fff';
+        c.font = '11px Arial';
+        c.fillText(Math.round(data.objectiveDist) + 'm', ox + 10, oy - 8);
+      }
     }
-    if (G.sideTarget) dot(G.sideTarget.x, G.sideTarget.z, '#2ec4b6', 5);
-    for (const cop of G.police) dot(cop.x, cop.z, '#3a86ff', 3);
-    for (const e of G.enemies) if (e.alive) dot(e.x, e.z, '#ff3b30', 3);
-  }
-
-  function paintPlayerArrow() {
-    const focus = G.currentVehicle || G.player;
-    mctx.save();
-    mctx.translate(toMap(focus.x), toMap(focus.z));
-    mctx.rotate(-focus.yaw + Math.PI);
-    mctx.fillStyle = '#ffffff';
-    mctx.beginPath();
-    mctx.moveTo(0, -7);
-    mctx.lineTo(5, 6);
-    mctx.lineTo(-5, 6);
-    mctx.closePath();
-    mctx.fill();
-    mctx.restore();
-    mctx.fillStyle = '#ffffff';
-    mctx.font = 'bold 11px system-ui, sans-serif';
-    mctx.fillText('N', 4, 13);
-  }
-
-  function drawMinimap() {
-    mctx.clearRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
-    mctx.fillStyle = 'rgba(10, 16, 24, 0.85)';
-    mctx.fillRect(0, 0, MINIMAP_SIZE, MINIMAP_SIZE);
-    paintDistricts();
-    paintRoads();
-    paintMarkers();
-    paintPlayerArrow();
-  }
-
-  function compassOf() {
-    const yaw = -G.playerYaw();
-    const idx = Math.round((((yaw % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8;
-    return COMPASS_POINTS[idx];
-  }
-
-  function objectiveText() {
-    let text = G.missionText;
-    const target = G.missionTarget || G.sideTarget;
-    if (target) {
-      // Live distance to the objective, in metres (1 unit ~ 2 m).
-      const focus = G.currentVehicle || G.player;
-      const metres = Math.round(Math.hypot(target.x - focus.x, target.z - focus.z) * 2);
-      text += ' · ' + metres + 'm';
+    // Traffic cars: white dots. Cops: red dots. Enemies: orange dots.
+    c.fillStyle = '#ffffff';
+    for (const car of data.cars || []) {
+      const [x, y] = toMap(car.x, car.z);
+      c.fillRect(x - 1, y - 1, 2, 2);
     }
-    return text;
-  }
-
-  let lastState = '';
-  function update() {
-    const speed = G.currentVehicle ? Math.abs(G.currentVehicle.speed) * 3.6 : G.player.speed * 3.6;
-    const stars = '★'.repeat(G.wanted) + '☆'.repeat(5 - G.wanted);
-    const compass = compassOf();
-    const districtName = G.currentDistrict ? G.currentDistrict.name : 'Vice Bay';
-    const objective = objectiveText();
-    const flashing = G.crimeFlash > 0 && G.wanted > 0;
-    const weapon = G.combat ? G.combat.weapon : '';
-    const ammo = G.combat ? (G.combat.ammo[G.combat.weapon] ?? '∞') : '';
-    const state = [
-      G.player.health, Math.floor(G.money), G.rep, stars, Math.round(speed),
-      compass, districtName, objective, G.currentVehicle ? G.currentVehicle.type.name : 'On foot',
-      weapon, ammo, G.interactPrompt || '', flashing ? 'flash' : '',
-    ].join('|');
-    if (state !== lastState) {
-      lastState = state;
-      const health = Math.max(0, G.player.health);
-      const fill = document.getElementById('health-fill');
-      fill.style.width = health + '%';
-      fill.style.background = health < 30 ? '#e74c3c' : 'linear-gradient(90deg, #27ae60, #2ecc71)';
-      setText('health-num', String(Math.ceil(health)));
-      setText('money', '$' + Math.floor(G.money).toLocaleString('en-US'));
-      setText('rep', 'REP ' + G.rep);
-      const starsEl = document.getElementById('stars');
-      starsEl.textContent = stars;
-      starsEl.style.color = G.wanted > 0 ? '#ffd23f' : '#888';
-      starsEl.classList.toggle('flash', flashing);
-      setText('speed', Math.round(speed) + ' km/h');
-      setText('compass', compass + ' · ' + districtName);
-      setText('objective', objective);
-      setText('vehicle-name', G.currentVehicle
-        ? G.currentVehicle.type.name + (G.currentVehicle.health < 100 ? ' — ' + Math.max(0, Math.ceil(G.currentVehicle.health)) + '%' : '')
-        : 'On foot');
-      setText('weapon', G.combat ? (weapon.toUpperCase() + ' · ' + ammo) : '');
-      setText('interact', G.interactPrompt || '');
-      setText('time', G.clockText());
+    c.fillStyle = '#ff3344';
+    for (const cop of data.cops || []) {
+      const [x, y] = toMap(cop.x, cop.z);
+      c.beginPath(); c.arc(x, y, 3, 0, Math.PI * 2); c.fill();
     }
-    drawMinimap();
+    c.fillStyle = '#ff8c1a';
+    for (const en of data.enemies || []) {
+      const [x, y] = toMap(en.x, en.z);
+      c.beginPath(); c.arc(x, y, 2.5, 0, Math.PI * 2); c.fill();
+    }
+    // Player arrow.
+    c.save();
+    c.translate(W / 2, H / 2);
+    c.rotate(-data.heading);
+    c.fillStyle = '#37e0ff';
+    c.beginPath();
+    c.moveTo(0, -8); c.lineTo(5, 6); c.lineTo(-5, 6); c.closePath(); c.fill();
+    c.restore();
+    // North tick.
+    c.fillStyle = '#fff';
+    c.font = 'bold 11px Arial';
+    c.fillText('N', W - 14, 14);
   }
 
-  return { update, root };
-}
+  // Missions menu: 10 story + 8 side rows. Returns nothing; main reads clicks.
+  renderMissions(missions, onPick) {
+    const list = this.el('mission-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const mk = (label, sub, cb, done) => {
+      const row = document.createElement('div');
+      row.className = 'mission-row' + (done ? ' done' : '');
+      row.textContent = label + ' — ' + sub;
+      row.addEventListener('click', cb);
+      list.appendChild(row);
+    };
+    STORY.forEach((m, i) => {
+      const state = missions.finishedStory ? 'DONE' : i < missions.storyIndex ? 'DONE' : i === missions.storyIndex ? 'CURRENT' : 'LOCKED';
+      mk(`M${m.id} ${m.name}`, state, () => { if (i === missions.storyIndex) { missions.startStory(i); onPick(); } }, i < missions.storyIndex);
+    });
+    SIDE.forEach((m) => {
+      const done = missions.sideDone.has(m.id);
+      mk(`★ ${m.name}`, done ? 'DONE' : 'SIDE', () => { if (!done) { missions.startSide(m.id); onPick(); } }, done);
+    });
+  }
 
-export function showToast(G, message) {
-  const el = document.getElementById('toast');
-  el.textContent = message;
-  el.classList.add('show');
-  clearTimeout(showToast._t);
-  showToast._t = setTimeout(() => el.classList.remove('show'), 3200);
+  showOverlay(id, show) {
+    const e = this.el(id);
+    if (e) e.style.display = show ? 'flex' : 'none';
+  }
 }

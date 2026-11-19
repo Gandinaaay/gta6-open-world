@@ -1,205 +1,110 @@
-// Procedural canvas textures: every surface in Vice Bay is painted from code
-// at boot, so the game ships zero image files and makes zero network requests.
-// Each texture is a small canvas plus a painter function and a repeat count;
-// windows, road paint, sand and water are all drawn before the first frame.
-// The sunset texture feeds the dawn/dusk sun disc in world.js. A painter
-// gets the 2D context and the canvas size and draws with plain 2D calls.
-function canvasTexture(w, h, paint, rx = 1, ry = 1) {
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  paint(canvas.getContext('2d'), w, h);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.repeat.set(rx, ry);
-  tex.anisotropy = 4;
-  return tex;
+// All textures are painted on canvas at boot — no image files.
+function canvasTex(w, h, draw, repeatX, repeatY) {
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  draw(c.getContext('2d'), w, h);
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  if (repeatX) t.repeat.set(repeatX, repeatY || repeatX);
+  t.anisotropy = 4;
+  return t;
 }
 
-function drawWindows(ctx, w, h, cols, rows, litChance, random) {
-  const cw = (w - 12) / cols;
-  const ch = (h - 12) / rows;
-  for (let r = 0; r < rows; r += 1) {
-    for (let c = 0; c < cols; c += 1) {
-      const lit = random() < litChance;
-      ctx.fillStyle = lit ? (random() < 0.7 ? '#ffd98a' : '#9fd8ff') : '#1c2733';
-      ctx.fillRect(6 + c * cw, 6 + r * ch, cw - 5, ch - 6);
+export function makeTextures() {
+  const road = canvasTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#2b2d33'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#33363d';
+    for (let i = 0; i < 200; i++) g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
+    g.fillStyle = '#e8c33a';
+    g.fillRect(w / 2 - 2, 0, 4, 30); g.fillRect(w / 2 - 2, 64, 4, 30);
+    g.fillStyle = '#dddddd';
+    g.fillRect(4, 0, 3, h); g.fillRect(w - 7, 0, 3, h);
+  }, 1, 16);
+
+  const sidewalk = canvasTex(64, 64, (g, w, h) => {
+    g.fillStyle = '#8d8d88'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#6f6f6a'; g.lineWidth = 2;
+    g.strokeRect(1, 1, w - 2, h - 2);
+    g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
+  }, 8, 8);
+
+  const facade = (base, win, lit) => canvasTex(128, 256, (g, w, h) => {
+    g.fillStyle = base; g.fillRect(0, 0, w, h);
+    g.fillStyle = 'rgba(0,0,0,0.25)';
+    for (let y = 0; y < h; y += 32) g.fillRect(0, y, w, 3);
+    for (let y = 16; y < h; y += 32) {
+      for (let x = 12; x < w; x += 28) {
+        const on = Math.random() < lit;
+        g.fillStyle = on ? '#ffd98a' : win;
+        g.fillRect(x, y, 16, 18);
+      }
     }
-  }
-}
-
-function scatter(ctx, w, h, count, colors, size) {
-  for (let i = 0; i < count; i += 1) {
-    ctx.fillStyle = colors[Math.floor(Math.random() * colors.length)];
-    ctx.fillRect(Math.random() * w, Math.random() * h, size, size);
-  }
-}
-
-export function buildingTexture(base, random, floors = 12) {
-  return canvasTexture(128, 256, (ctx, w, h) => {
-    ctx.fillStyle = base;
-    ctx.fillRect(0, 0, w, h);
-    // Dark caps top and bottom, and a band halfway up that breaks the
-    // facade into two blocks.
-    ctx.fillStyle = 'rgba(0,0,0,0.25)';
-    ctx.fillRect(0, 0, w, 8);
-    ctx.fillRect(0, h - 10, w, 10);
-    ctx.fillStyle = 'rgba(0,0,0,0.18)';
-    ctx.fillRect(0, Math.floor(h / 2), w, 6);
-    drawWindows(ctx, w, h, 6, floors, 0.45, random);
   });
-}
 
-export function houseTexture(base, random) {
-  return canvasTexture(128, 128, (ctx, w, h) => {
-    ctx.fillStyle = base;
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#5a3a28';
-    ctx.fillRect(0, 0, w, 26);
-    ctx.fillStyle = '#2b1d16';
-    ctx.fillRect(w / 2 - 10, h - 34, 20, 34);
-    drawWindows(ctx, w, h, 3, 2, 0.6, random);
+  const neon = canvasTex(512, 128, (g, w, h) => {
+    g.fillStyle = '#0a0618'; g.fillRect(0, 0, w, h);
+    g.font = 'bold 64px Arial';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.shadowColor = '#ff2fb3'; g.shadowBlur = 26;
+    g.fillStyle = '#ff5ec4';
+    g.fillText('NEON TIDE', w / 2, h / 2 - 8);
+    g.shadowColor = '#37e0ff'; g.shadowBlur = 18;
+    g.fillStyle = '#7df0ff';
+    g.font = 'bold 26px Arial';
+    g.fillText('DANCE  •  DRINKS  •  ALL NIGHT', w / 2, h - 22);
   });
-}
 
-export function roadTexture() {
-  return canvasTexture(128, 128, (ctx, w, h) => {
-    ctx.fillStyle = '#2b2e33';
-    ctx.fillRect(0, 0, w, h);
-    scatter(ctx, w, h, 40, ['#34383f'], 2);
-    // Centre dashes and edge lines, worn a little at random.
-    ctx.fillStyle = '#d8c84a';
-    ctx.fillRect(w / 2 - 2, 8, 4, 40);
-    ctx.fillRect(w / 2 - 2, h - 48, 4, 40);
-    ctx.fillStyle = '#e8e8e8';
-    ctx.fillRect(4, 0, 3, h);
-    ctx.fillRect(w - 7, 0, 3, h);
-  }, 1, 80);
-}
+  const billboard = canvasTex(512, 256, (g, w, h) => {
+    const grad = g.createLinearGradient(0, 0, w, h);
+    grad.addColorStop(0, '#ff7a1a'); grad.addColorStop(1, '#c81d5e');
+    g.fillStyle = grad; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#fff8e0';
+    g.font = 'bold 52px Arial'; g.textAlign = 'center';
+    g.fillText('HAVANA MARKET', w / 2, 92);
+    g.font = 'bold 30px Arial';
+    g.fillText('FRESH • CHEAP • OPEN 24H', w / 2, 150);
+    g.fillStyle = '#1a1a1a';
+    g.fillRect(30, 190, w - 60, 8);
+  });
 
-export function sidewalkTexture() {
-  return canvasTexture(128, 128, (ctx, w, h) => {
-    ctx.fillStyle = '#8d8d85';
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = '#6f6f68';
-    ctx.lineWidth = 2;
-    for (let i = 0; i <= 4; i += 1) {
-      ctx.beginPath(); ctx.moveTo(0, i * 32); ctx.lineTo(w, i * 32); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(i * 32, 0); ctx.lineTo(i * 32, h); ctx.stroke();
+  const sand = canvasTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#dcc78f'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#cbb57e';
+    for (let i = 0; i < 160; i++) g.fillRect(Math.random() * w, Math.random() * h, 3, 2);
+  }, 20, 20);
+
+  const grass = canvasTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#4a7a3a'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#3d6b30';
+    for (let i = 0; i < 200; i++) g.fillRect(Math.random() * w, Math.random() * h, 2, 4);
+  }, 20, 20);
+
+  const water = canvasTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#1a5a7a'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = 'rgba(255,255,255,0.25)'; g.lineWidth = 2;
+    for (let y = 8; y < h; y += 22) {
+      g.beginPath();
+      for (let x = 0; x <= w; x += 16) g.lineTo(x, y + Math.sin(x * 0.3 + y) * 3);
+      g.stroke();
     }
-  }, 1, 40);
-}
+  }, 12, 12);
 
-export function grassTexture() {
-  return canvasTexture(128, 128, (ctx, w, h) => {
-    ctx.fillStyle = '#4a7c3a';
-    ctx.fillRect(0, 0, w, h);
-    scatter(ctx, w, h, 500, ['#557f42', '#3f6b31'], 3);
-  }, 24, 24);
-}
-
-export function sandTexture() {
-  return canvasTexture(128, 128, (ctx, w, h) => {
-    ctx.fillStyle = '#d9c08a';
-    ctx.fillRect(0, 0, w, h);
-    scatter(ctx, w, h, 400, ['#c9ae72', '#e8d5a4'], 2);
-  }, 6, 40);
-}
-
-export function waterTexture() {
-  return canvasTexture(128, 128, (ctx, w, h) => {
-    ctx.fillStyle = '#1e6f8e';
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    ctx.lineWidth = 2;
-    for (let i = 0; i < 10; i += 1) {
-      const y = Math.random() * h;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.bezierCurveTo(30, y - 6, 70, y + 6, w, y);
-      ctx.stroke();
-    }
-  }, 10, 10);
-}
-
-export function runwayTexture() {
-  return canvasTexture(128, 256, (ctx, w, h) => {
-    ctx.fillStyle = '#23262b';
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#f5f5f5';
-    for (let y = 8; y < h; y += 32) ctx.fillRect(w / 2 - 3, y, 6, 18);
-    ctx.fillStyle = '#e8b93c';
-    ctx.fillRect(6, 0, 4, h);
-    ctx.fillRect(w - 10, 0, 4, h);
-  }, 1, 4);
-}
-
-export function containerTexture(color) {
-  return canvasTexture(128, 64, (ctx, w, h) => {
-    ctx.fillStyle = color;
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-    ctx.lineWidth = 3;
-    for (let x = 0; x < w; x += 16) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-    }
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.font = 'bold 16px system-ui, sans-serif';
-    ctx.fillText('VB-PORT', 10, 24);
+  const runway = canvasTex(128, 256, (g, w, h) => {
+    g.fillStyle = '#23262b'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#f2f2f2';
+    for (let y = 10; y < h; y += 42) g.fillRect(w / 2 - 3, y, 6, 24);
+    g.fillStyle = '#e8c33a';
+    g.fillRect(6, 0, 4, h); g.fillRect(w - 10, 0, 4, h);
   });
-}
 
-// A big sign texture: text wrapped to a few centred lines on a flat colour.
-export function billboardTexture(text, bg, fg) {
-  return canvasTexture(256, 128, (ctx, w, h) => {
-    ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = fg;
-    ctx.font = 'bold 34px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const words = text.split(' ');
-    const lines = [];
-    let current = '';
-    for (const word of words) {
-      const next = (current + ' ' + word).trim();
-      if (next.length > 14) { lines.push(current.trim()); current = word; }
-      else current = next;
-    }
-    lines.push(current.trim());
-    lines.forEach((line, i) => ctx.fillText(line, w / 2, h / 2 + (i - (lines.length - 1) / 2) * 38));
-  });
-}
-
-// Neon-style sign: glowing letters on a dark plate, for clubs and shops at night.
-export function neonTexture(text, glow) {
-  return canvasTexture(256, 96, (ctx, w, h) => {
-    ctx.fillStyle = '#0a0a14';
-    ctx.fillRect(0, 0, w, h);
-    ctx.font = 'bold 40px system-ui, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.shadowColor = glow;
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = glow;
-    ctx.fillText(text, w / 2, h / 2);
-    ctx.shadowBlur = 0;
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(text, w / 2, h / 2);
-  });
-}
-
-// Sunset disc: a soft radial glow, deep orange at the centre fading to
-// transparent, painted once and reused by the sun disc in world.js.
-export function sunsetTexture() {
-  return canvasTexture(128, 128, (ctx, w, h) => {
-    const g = ctx.createRadialGradient(w / 2, h / 2, 4, w / 2, h / 2, w / 2);
-    g.addColorStop(0, 'rgba(255, 214, 140, 1)');
-    g.addColorStop(0.35, 'rgba(255, 150, 70, 0.9)');
-    g.addColorStop(0.7, 'rgba(255, 90, 60, 0.35)');
-    g.addColorStop(1, 'rgba(255, 90, 60, 0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
-  });
+  return {
+    road, sidewalk, sand, grass, water, runway,
+    facadeTower: facade('#5a6b7d', '#2a3644', 0.35),
+    facadeMid: facade('#8a5a3a', '#33241a', 0.45),
+    facadeLow: facade('#c8b088', '#5a4a30', 0.3),
+    facadeInd: facade('#6a6a62', '#3a3a34', 0.15),
+    facadeVilla: facade('#e8d8c0', '#6a5a40', 0.5),
+    neon, billboard,
+  };
 }

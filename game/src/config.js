@@ -1,120 +1,48 @@
-// Vice Bay: Blood & Destiny — the single tuning sheet for the whole game.
-// Every number the world, the cars, the guns and the wanted system use lives
-// here, so balancing is editing one file. One world unit is about two metres:
-// the map is 1000 x 1000 units, a compact ~2 km square city. Districts are
-// plain objects built by small helpers; the first district whose box holds a
-// point wins, so the Highway Ring (last, covering everything) is the fallback
-// for any point no other district claims.
-export const WORLD = {
-  size: 1000,
-  half: 500,
-  roadSpacing: 100,
-  roadWidth: 16,
-  sidewalkWidth: 4,
+// Vice Bay: Blood & Destiny — tuning constants, district and vehicle tables.
+export const CFG = {
+  world: 2000,
+  half: 1000,
+  streetStep: 100,
+  streetWidth: 14,
+  sidewalk: 4,
+  gravity: 22,
+  walkSpeed: 6,
+  runSpeed: 10,
+  jumpSpeed: 8,
+  startMoney: 500,
+  startHealth: 100,
+
+  districts: [
+    { name: 'Downtown', cx: 0, cz: 0, r: 320, style: 'tower', color: 0x8fa3b8 },
+    { name: 'Ocean Beach', cx: -700, cz: 600, r: 260, style: 'low', color: 0xe8d8a0 },
+    { name: 'Little Havana', cx: 450, cz: -450, r: 260, style: 'mid', color: 0xe8a06a },
+    { name: 'Industrial Port', cx: 800, cz: 550, r: 240, style: 'industrial', color: 0x9a8f7a },
+    { name: 'Rich Hills', cx: -650, cz: -650, r: 240, style: 'villa', color: 0xb8d8a0 },
+    { name: 'Airport', cx: 700, cz: -750, r: 260, style: 'flat', color: 0xa0b8c8 },
+    { name: 'Criminal District', cx: -250, cz: 800, r: 220, style: 'mid', color: 0xc86868 },
+    { name: 'Highway Ring', cx: 0, cz: 0, r: 980, style: 'ring', color: 0x888888 },
+  ],
+
+  cars: {
+    sport: { label: 'Comet GT', top: 66, accel: 30, brake: 52, steer: 2.5, len: 4.4, wid: 2.0, color: 0xd21f3c, price: 45000 },
+    sedan: { label: 'Bravado', top: 48, accel: 22, brake: 46, steer: 2.2, len: 4.6, wid: 2.0, color: 0x2f6fb2, price: 12000 },
+    suv: { label: 'Patriot XL', top: 44, accel: 18, brake: 40, steer: 1.9, len: 5.0, wid: 2.2, color: 0x3a3a3a, price: 22000 },
+    bike: { label: 'Night Hawk', top: 58, accel: 34, brake: 56, steer: 3.1, len: 2.2, wid: 0.8, color: 0x141414, price: 9000 },
+    taxi: { label: 'Downtown Cab', top: 46, accel: 20, brake: 46, steer: 2.2, len: 4.6, wid: 2.0, color: 0xf5c518, price: 0 },
+    truck: { label: 'Hauler', top: 38, accel: 14, brake: 34, steer: 1.6, len: 6.5, wid: 2.5, color: 0x777777, price: 30000 },
+    police: { label: 'Interceptor', top: 60, accel: 30, brake: 56, steer: 2.7, len: 4.6, wid: 2.0, color: 0x111827, price: 0 },
+  },
+
+  weapons: {
+    fists: { label: 'Fists', damage: 12, rate: 0.45, range: 2.4, auto: false, mag: Infinity, reserve: Infinity, spread: 0, pellets: 1 },
+    pistol: { label: 'Pistol', damage: 26, rate: 0.28, range: 60, auto: false, mag: 12, reserve: 96, spread: 0.01, pellets: 1 },
+    smg: { label: 'SMG', damage: 16, rate: 0.09, range: 45, auto: true, mag: 30, reserve: 180, spread: 0.06, pellets: 1 },
+    shotgun: { label: 'Shotgun', damage: 14, rate: 0.8, range: 30, auto: false, mag: 6, reserve: 36, spread: 0.12, pellets: 6 },
+    rifle: { label: 'Rifle', damage: 45, rate: 0.5, range: 120, auto: false, mag: 10, reserve: 60, spread: 0.004, pellets: 1 },
+  },
+  weaponOrder: ['fists', 'pistol', 'smg', 'shotgun', 'rifle'],
+
+  heat: { steal: 1, shoot: 1, kill: 2, copKill: 2 },
+  lightCycle: 9,
+  rainGrip: 0.75,
 };
-
-function district(id, name, x0, z0, x1, z1, style, density) {
-  return { id, name, x0, z0, x1, z1, style, density };
-}
-
-export const DISTRICTS = [
-  district('downtown', 'Downtown', -200, -200, 200, 200, 'tower', 1.0),
-  district('beach', 'Ocean Beach', 350, -500, 500, 500, 'beach', 0.55),
-  district('havana', 'Little Havana', -500, 100, -200, 500, 'house', 0.8),
-  district('port', 'Industrial Port', -500, -500, -200, -100, 'warehouse', 0.6),
-  district('hills', 'Rich Hills', 100, -500, 500, -200, 'villa', 0.5),
-  district('airport', 'Vice Bay Airport', 100, 200, 350, 500, 'airport', 0.3),
-  district('criminal', 'Criminal District', -200, 200, 100, 500, 'tenement', 0.9),
-  district('highway', 'Highway Ring', -500, -500, 500, 500, 'highway', 0.4),
-];
-
-export function districtAt(x, z) {
-  for (const d of DISTRICTS) {
-    if (x >= d.x0 && x < d.x1 && z >= d.z0 && z < d.z1) return d;
-  }
-  return DISTRICTS[DISTRICTS.length - 1];
-}
-
-function vehicle(key, name, kind, price, topSpeed, accel, brake, turn, color, seats) {
-  return { key, name, kind, price, topSpeed, accel, brake, turn, color, seats };
-}
-
-// Top speed is world units per second; the HUD shows it as km/h (x3.6), so
-// the Comet GT's 66 reads as ~238 km/h on the speedometer.
-const VEHICLE_LIST = [
-  vehicle('sport', 'Comet GT', 'sport', 12000, 66, 36, 58, 2.7, 0xd21f3c, 2),
-  vehicle('sedan', 'Bayview Sedan', 'sedan', 4500, 43, 23, 46, 2.2, 0x2e6fb0, 4),
-  vehicle('suv', 'Trailblazer SUV', 'suv', 8000, 47, 25, 48, 2.0, 0x3a3f44, 5),
-  vehicle('bike', 'Nightrider Bike', 'bike', 6000, 60, 42, 62, 3.5, 0x111111, 2),
-  vehicle('taxi', 'Bay Taxi', 'taxi', 0, 41, 21, 46, 2.2, 0xf2b705, 4),
-  vehicle('police', 'VBPD Interceptor', 'police', 0, 58, 34, 56, 2.6, 0x0d1b2a, 4),
-  vehicle('truck', 'Port Hauler', 'truck', 9000, 35, 17, 38, 1.7, 0x7a4a21, 2),
-];
-
-export const VEHICLE_TYPES = {};
-for (const v of VEHICLE_LIST) VEHICLE_TYPES[v.key] = v;
-
-function weapon(key, name, price, damage, range, ammo, rate) {
-  return { key, name, price, damage, range, ammo, rate };
-}
-
-const WEAPON_LIST = [
-  weapon('fists', 'Fists', 0, 12, 2.2, Infinity, 0.45),
-  weapon('pistol', 'P9 Pistol', 800, 25, 60, 120, 0.28),
-  weapon('smg', 'K-9 SMG', 2500, 16, 50, 240, 0.09),
-  weapon('shotgun', 'Street Sweeper', 3200, 60, 22, 40, 0.8),
-  weapon('rifle', 'AR-77 Rifle', 6000, 40, 90, 180, 0.14),
-];
-
-export const WEAPONS = {};
-for (const w of WEAPON_LIST) WEAPONS[w.key] = w;
-
-export const CLOTHES = [
-  { name: 'Street Tee', price: 0, color: 0x8a2be2 },
-  { name: 'Beach Shirt', price: 250, color: 0x2ec4b6 },
-  { name: 'Night Suit', price: 1200, color: 0x1a1a2e },
-  { name: 'Gold Chain Look', price: 2500, color: 0xd4af37 },
-];
-
-export const UPGRADES = [
-  { id: 'engine1', name: 'Engine Tune I (+15% top speed)', price: 3000, apply: 'speed' },
-  { id: 'engine2', name: 'Engine Tune II (+30% top speed)', price: 7000, apply: 'speed2' },
-  { id: 'armor1', name: 'Armour Plating (+50% durability)', price: 4000, apply: 'armor' },
-  { id: 'tires1', name: 'Grip Tyres (+handling)', price: 2000, apply: 'grip' },
-];
-
-// Controls. Mouse: drag orbits the camera, wheel zooms, left click shoots or
-// punches. Space is jump on foot and the handbrake while driving.
-export const KEYS = {
-  forward: 'KeyW',
-  back: 'KeyS',
-  left: 'KeyA',
-  right: 'KeyD',
-  jump: 'Space',
-  sprint: 'ShiftLeft',
-  crouch: 'KeyC',
-  interact: 'KeyE',
-  enterVehicle: 'KeyF',
-  punch: 'KeyQ',
-  weapon1: 'Digit1',
-  weapon2: 'Digit2',
-  weapon3: 'Digit3',
-  weapon4: 'Digit4',
-  weapon5: 'Digit5',
-  pause: 'Escape',
-  horn: 'KeyH',
-  radio: 'KeyR',
-  mission: 'KeyM',
-};
-
-export const SAVE_KEY = 'vicebay-save-v1';
-export const STEP = 1 / 60;
-export const DAY_LENGTH = 480; // seconds for one full day/night cycle
-export const WANTED_COOLOFF_BASE = 14; // seconds unseen before one star drops
-
-// Round-3 tuning carried over: how hard the handbrake slides, how long the
-// wanted stars flash when the heat rises, and the dawn window in which the
-// sunset sun disc shows.
-export const HANDBRAKE_GRIP = 1.7; // steering multiplier while the handbrake is out
-export const WANTED_FLASH_TIME = 2.0; // seconds the HUD stars flash after a new star
-export const SUNSET_WINDOW = { from: 0.02, to: 0.1 }; // dayTime range for the dawn disc
