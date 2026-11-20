@@ -1,36 +1,45 @@
-// localStorage save: money, rep, progress, owned cars, upgrades, time + weather.
-const KEY = 'vicebay-save-v1';
+// Vice Bay — localStorage save: money, reputation, story progress, time of
+// day, weather, garage cars and bought upgrades.
+
+import { CFG } from './config.js';
 
 export function saveGame(state) {
   try {
     const data = {
+      version: 1,
       money: state.money,
       rep: state.rep,
       storyIndex: state.storyIndex,
-      owned: state.owned || [],
-      upgrades: state.upgrades || {},
+      sideDone: [...state.sideDone],
       timeOfDay: state.timeOfDay,
       weather: state.weather,
-      playerPos: state.playerPos ? { x: state.playerPos.x, z: state.playerPos.z } : null,
+      upgrades: state.upgrades,
+      garage: state.garage,
       savedAt: Date.now(),
     };
-    localStorage.setItem(KEY, JSON.stringify(data));
+    localStorage.setItem(CFG.saveKey, JSON.stringify(data));
     return true;
-  } catch (e) { return false; }
+  } catch {
+    return false;
+  }
 }
 
 export function loadGame() {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(CFG.saveKey);
     if (!raw) return null;
-    return JSON.parse(raw);
-  } catch (e) { return null; }
-}
-
-export function hasSave() {
-  try { return !!localStorage.getItem(KEY); } catch (e) { return false; }
+    const data = JSON.parse(raw);
+    if (!data || data.version !== 1) return null;
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 export function clearSave() {
-  try { localStorage.removeItem(KEY); } catch (e) { /* ignore */ }
+  try {
+    localStorage.removeItem(CFG.saveKey);
+  } catch {
+    // ignore
+  }
 }

@@ -1,59 +1,58 @@
-// Staged screenshot scenes for ?shot=start|play|chase|night&seed=1.
-// Stages the scene deterministically, then sets window.__shotReady.
-export function stageShot(g, name) {
-  const ready = () => {
-    requestAnimationFrame(() => requestAnimationFrame(() => { window.__shotReady = true; }));
-  };
-  // A few extra cars parked/driving on the road grid, headings along the street axes.
-  const shotCars = () => {
-    const spots = [
-      { type: 'sedan', x: 100, z: 3.5, heading: Math.PI / 2 },
-      { type: 'taxi', x: -100, z: -3.5, heading: -Math.PI / 2 },
-      { type: 'suv', x: 3.5, z: 200, heading: 0 },
-      { type: 'sport', x: -3.5, z: -200, heading: Math.PI },
-    ];
-    for (const s of spots) g.vehicles.spawn(s.type, s.x, s.z, s.heading, { ai: false });
-  };
+// Vice Bay — screenshot staging: the 4 deterministic scenes the dossier
+// shows (?shot=start|play|chase|night&seed=1). Each scene sets the time,
+// weather, player position and wanted level, then raises
+// window.__shotReady so the capture driver knows the frame is ready.
+// Cars are spawned road-aligned so the shots look composed, not random.
 
-  if (name === 'start') {
-    g.world.setTime(6.2);
-    g.world.setWeather('clear');
-    g.state = 'title';
-    g.hud.showOverlay('title', true);
-    ready();
-    return;
+export function stageShot(mode, ctx) {
+  switch (mode) {
+    case 'start': {
+      // Dawn title over the city: morning light, clear sky, player on the
+      // Downtown road with the towers rising behind them to the north.
+      // (Camera sits south of the player, so heading 0 faces it.)
+      ctx.setTime(0.27);
+      ctx.setWeather('clear');
+      ctx.placePlayer(0, 40, 0);
+      ctx.setWanted(0);
+      break;
+    }
+    case 'play': {
+      // Midday driving Downtown: red Comet GT on the road, objective ahead.
+      ctx.setTime(0.45);
+      ctx.setWeather('clear');
+      ctx.placePlayer(0, 40, 0);
+      ctx.putCar('sport', 0, 44, 0);
+      ctx.enterCar();
+      ctx.setWanted(0);
+      break;
+    }
+    case 'chase': {
+      // Night pursuit: 3 wanted stars, two police interceptors closing in.
+      ctx.setTime(0.82);
+      ctx.setWeather('clear');
+      ctx.placePlayer(160, 160, Math.PI / 2);
+      ctx.putCar('sedan', 160, 164, Math.PI / 2);
+      ctx.enterCar();
+      ctx.setWanted(3);
+      ctx.spawnPolice(2);
+      break;
+    }
+    case 'night': {
+      // Beach race in the rain at night: wet road, headlights, rain streaks.
+      ctx.setTime(0.96);
+      ctx.setWeather('rain');
+      ctx.placePlayer(-480, 480, Math.PI / 2);
+      ctx.putCar('sport', -480, 484, Math.PI / 2);
+      ctx.enterCar();
+      ctx.putCar('sport', -480, 470, Math.PI / 2);
+      ctx.setWanted(0);
+      break;
+    }
+    default:
+      return false;
   }
-
-  g.startNewGame();
-  if (name === 'play') {
-    g.world.setTime(14);
-    g.world.setWeather('clear');
-    g.giveCar('sport', 0, 0, Math.PI / 2);
-    g.missions.startStory(0);
-    shotCars();
-    ready();
-    return;
-  }
-  if (name === 'chase') {
-    g.world.setTime(21.5);
-    g.world.setWeather('clear');
-    g.giveCar('sport', 0, 0, Math.PI / 2);
-    g.missions.startStory(3);
-    g.police.setWanted(3, g.audio);
-    shotCars();
-    ready();
-    return;
-  }
-  if (name === 'night') {
-    g.world.setTime(22);
-    g.world.setWeather('rain');
-    g.giveCar('sport', -700, 600, Math.PI / 2);
-    g.missions.startSide('race');
-    shotCars();
-    ready();
-    return;
-  }
-  // Unknown shot: just start the game.
-  g.world.setTime(10);
-  ready();
+  ctx.setShotReady();
+  return true;
 }
+
+export const SHOT_MODES = ['start', 'play', 'chase', 'night'];

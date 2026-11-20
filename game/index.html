@@ -5,75 +5,80 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vice Bay: Blood &amp; Destiny</title>
 <style>
-  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0a0e18; font-family: Arial, Helvetica, sans-serif; color: #fff; }
-  #app { position: fixed; inset: 0; }
-  #app canvas { display: block; }
-  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; }
-  .panel { background: rgba(8, 12, 20, 0.72); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 8px 12px; }
-  #stats { position: absolute; top: 12px; left: 12px; display: flex; flex-direction: column; gap: 6px; min-width: 210px; }
-  #health-bar { width: 180px; height: 12px; background: rgba(255,255,255,0.2); border-radius: 6px; overflow: hidden; }
-  #health-fill { height: 100%; width: 100%; background: #2ecc71; }
-  #stars { color: #ffd23e; font-size: 20px; letter-spacing: 2px; }
-  #money { font-size: 20px; font-weight: bold; color: #7dff9a; }
-  #rep { font-size: 13px; color: #9db8d8; }
-  #speed { position: absolute; right: 16px; bottom: 16px; font-size: 26px; font-weight: bold; }
-  #compass { position: absolute; top: 12px; right: 12px; font-size: 14px; }
-  #objective { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); font-size: 15px; text-align: center; max-width: 46%; }
-  #msg { position: absolute; bottom: 90px; left: 50%; transform: translateX(-50%); font-size: 17px; color: #ffd23e; text-shadow: 0 1px 3px #000; transition: opacity 0.5s; }
-  #minimap { position: absolute; right: 16px; bottom: 64px; border: 2px solid rgba(255,255,255,0.35); border-radius: 50%; background: rgba(8,12,20,0.85); }
-  #help { position: absolute; left: 12px; bottom: 12px; font-size: 12px; color: rgba(255,255,255,0.75); }
-  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 10; text-align: center; }
-  #title { background: linear-gradient(rgba(10,6,24,0.25), rgba(10,6,24,0.55)); }
-  #title h1 { font-size: 54px; margin: 0; color: #ff5ec4; text-shadow: 0 0 24px #ff2fb3, 0 2px 0 #000; letter-spacing: 2px; }
-  #title h2 { font-size: 20px; margin: 6px 0 24px; color: #7df0ff; text-shadow: 0 0 12px #37e0ff; letter-spacing: 6px; }
-  #title p { color: #ddd; max-width: 560px; line-height: 1.5; }
-  .btn { pointer-events: auto; cursor: pointer; background: #ff2fb3; color: #fff; border: none; border-radius: 8px; padding: 12px 28px; font-size: 18px; font-weight: bold; margin: 6px; }
-  .btn:hover { background: #ff5ec4; }
-  .btn.secondary { background: #2f6fb2; }
-  #pause, #missions { background: rgba(5, 8, 16, 0.82); display: none; }
-  #pause h1, #missions h1 { font-size: 36px; margin-bottom: 10px; }
-  #mission-list { max-height: 60vh; overflow-y: auto; width: 520px; }
-  .mission-row { pointer-events: auto; cursor: pointer; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); border-radius: 6px; padding: 9px 12px; margin: 5px 0; text-align: left; font-size: 14px; }
-  .mission-row:hover { background: rgba(255,255,255,0.18); }
-  .mission-row.done { opacity: 0.55; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0a1026; font-family: Arial, Helvetica, sans-serif; }
+  #game-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+  .hidden { display: none !important; }
+  /* Title screen: translucent so the city shows through. */
+  #title-screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: linear-gradient(180deg, rgba(10,16,38,0.55), rgba(10,16,38,0.85)); color: #fff; z-index: 10; text-align: center; }
+  #title-screen h1 { font-size: 64px; letter-spacing: 4px; color: #ff2e88; text-shadow: 0 0 24px rgba(255,46,136,0.8), 0 2px 0 #000; }
+  #title-screen h1 span { color: #22d3ee; }
+  #title-screen p.tagline { font-size: 18px; margin: 12px 0 28px; color: #e8e8e8; text-shadow: 0 1px 4px #000; }
+  .btn { display: inline-block; margin: 6px; padding: 14px 34px; font-size: 18px; font-weight: bold; letter-spacing: 2px; color: #fff; background: #ff2e88; border: none; border-radius: 6px; cursor: pointer; box-shadow: 0 4px 16px rgba(255,46,136,0.5); }
+  .btn:hover { background: #ff4d9d; }
+  .btn.secondary { background: #1f6feb; box-shadow: 0 4px 16px rgba(31,111,235,0.5); }
+  .btn.secondary:hover { background: #3b82f6; }
+  #title-controls { margin-top: 26px; font-size: 13px; color: #c8cdd8; line-height: 1.7; }
+  /* Pause screen. */
+  #pause-screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(10,16,38,0.75); color: #fff; z-index: 10; }
+  #pause-screen h2 { font-size: 44px; letter-spacing: 4px; margin-bottom: 20px; }
+  /* HUD. */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 5; color: #fff; }
+  #hud-topleft { position: absolute; top: 16px; left: 16px; }
+  #hud-stars { font-size: 30px; color: #ffd23f; letter-spacing: 4px; text-shadow: 0 0 10px rgba(255,210,63,0.7), 0 2px 2px #000; }
+  #hud-stars .dim { color: rgba(255,255,255,0.25); text-shadow: none; }
+  #hud-stars.flash { animation: starflash 0.5s ease; }
+  @keyframes starflash { 0% { transform: scale(1.4); } 100% { transform: scale(1); } }
+  #hud-health { width: 220px; height: 18px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.4); border-radius: 9px; margin-top: 8px; position: relative; overflow: hidden; }
+  #hud-health-fill { height: 100%; width: 100%; background: #2ecc71; transition: width 0.2s; }
+  #hud-health-text { position: absolute; right: 6px; top: 0; font-size: 12px; line-height: 18px; }
+  #hud-money { font-size: 26px; font-weight: bold; color: #7dff8a; text-shadow: 0 2px 3px #000; margin-top: 6px; }
+  #hud-rep { font-size: 14px; color: #ffd23f; text-shadow: 0 1px 2px #000; }
+  #hud-topright { position: absolute; top: 16px; right: 16px; text-align: right; }
+  #hud-minimap { border: 2px solid rgba(255,255,255,0.5); border-radius: 8px; box-shadow: 0 2px 12px rgba(0,0,0,0.6); }
+  #hud-compass { font-size: 20px; font-weight: bold; margin-top: 6px; text-shadow: 0 2px 3px #000; }
+  #hud-objective { font-size: 14px; color: #ffd23f; text-shadow: 0 1px 2px #000; margin-top: 4px; max-width: 240px; }
+  #hud-bottomright { position: absolute; bottom: 18px; right: 20px; text-align: right; }
+  #hud-speed { font-size: 44px; font-weight: bold; text-shadow: 0 2px 4px #000; line-height: 1; }
+  #hud-speed-unit { font-size: 13px; color: #c8cdd8; }
+  #hud-weapon { font-size: 16px; margin-top: 6px; text-shadow: 0 1px 2px #000; }
+  #hud-ammo { font-size: 14px; color: #ffd23f; }
+  #hud-message { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); font-size: 22px; font-weight: bold; color: #ffd23f; text-shadow: 0 2px 4px #000; transition: opacity 0.4s; text-align: center; }
+  #hud-mission { position: absolute; bottom: 18px; left: 20px; font-size: 15px; color: #e8e8e8; text-shadow: 0 1px 3px #000; max-width: 420px; }
+  #hud-menu { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 520px; max-height: 80vh; overflow-y: auto; background: rgba(8,12,26,0.92); border: 2px solid rgba(255,46,136,0.6); border-radius: 10px; padding: 22px; pointer-events: auto; }
+  #hud-menu h2 { color: #ff2e88; letter-spacing: 3px; margin-bottom: 12px; }
+  .hud-menu-row { padding: 7px 8px; font-size: 15px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+  .hud-menu-row.active { background: rgba(255,46,136,0.25); }
+  .hud-menu-row.side { color: #a8d8ff; }
+  .hud-menu-side { float: right; font-size: 11px; color: #22d3ee; }
+  .hud-menu-hint { margin-top: 12px; font-size: 13px; color: #c8cdd8; }
 </style>
 </head>
 <body>
-<div id="app"></div>
-<div id="hud">
-  <div id="stats" class="panel">
-    <div id="health-bar"><div id="health-fill"></div></div>
-    <div id="money">$500</div>
-    <div id="rep">REP 0</div>
-    <div id="stars">☆☆☆☆☆</div>
-  </div>
-  <div id="objective" class="panel">Press NEW GAME to start</div>
-  <div id="compass" class="panel">N 0°</div>
-  <div id="msg"></div>
-  <canvas id="minimap" width="200" height="200"></canvas>
-  <div id="speed"></div>
-  <div id="help">WASD move/drive • E enter/exit car • Space handbrake/jump • Mouse drag camera • Click shoot • 1-5 weapons • R reload • M missions • Esc pause</div>
-</div>
-<div id="title" class="overlay">
-  <h1>VICE BAY</h1>
-  <h2>BLOOD &amp; DESTINY</h2>
-  <p>An original open-world crime game. Explore a 2 km coastal city across 8 districts, steal cars, outrun the law, and work your way through 10 story missions and 8 side jobs. The city remembers every choice.</p>
+<canvas id="game-canvas"></canvas>
+
+<div id="title-screen">
+  <h1>VICE BAY<br><span>BLOOD &amp; DESTINY</span></h1>
+  <p class="tagline">An original open-world crime game. Steal cars, outrun the law, take the city.</p>
   <div>
-    <button id="btn-new" class="btn">NEW GAME</button>
-    <button id="btn-continue" class="btn secondary" style="display:none">CONTINUE</button>
+    <button class="btn" id="btn-new">NEW GAME</button>
+    <button class="btn secondary" id="btn-continue" style="display:none">CONTINUE</button>
   </div>
-  <p style="font-size:13px">Desktop Chrome • keyboard + mouse • plays offline from static files</p>
+  <div id="title-controls">
+    WASD — move / drive &nbsp;·&nbsp; SPACE — handbrake / jump &nbsp;·&nbsp; E — enter &amp; steal cars<br>
+    Mouse drag — camera &nbsp;·&nbsp; Click / F — shoot &nbsp;·&nbsp; Q — switch weapon &nbsp;·&nbsp; R — reload<br>
+    M — missions &nbsp;·&nbsp; B — shop (near a shop) &nbsp;·&nbsp; Esc — pause &nbsp;·&nbsp; N — mute
+  </div>
 </div>
-<div id="pause" class="overlay">
-  <h1>PAUSED</h1>
-  <button id="btn-resume" class="btn">RESUME</button>
-  <p style="font-size:13px">Esc to resume • M for missions</p>
+
+<div id="pause-screen" class="hidden">
+  <h2>PAUSED</h2>
+  <button class="btn" id="btn-resume">RESUME</button>
+  <button class="btn secondary" id="btn-quit">QUIT TO TITLE</button>
 </div>
-<div id="missions" class="overlay">
-  <h1>MISSIONS</h1>
-  <div id="mission-list"></div>
-  <button id="btn-close-missions" class="btn">CLOSE (M / Esc)</button>
-</div>
+
+<div id="hud" class="hidden"></div>
+
 <script src="vendor/three.min.js"></script>
 <script type="module" src="src/main.js"></script>
 </body>

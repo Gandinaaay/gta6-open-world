@@ -1,60 +1,64 @@
-// Keyboard + mouse input. Edge-triggered "pressed" keys are consumed each frame.
+// Vice Bay — keyboard + mouse input with edge detection.
+// `pressed(code)` is true only on the frame the key went down, so menu keys
+// and weapon switches fire once instead of every frame.
+
 export class Input {
-  constructor() {
+  constructor(canvas) {
     this.keys = new Set();
-    this.pressed = new Set();
+    this.justPressed = new Set();
     this.mouseDX = 0;
     this.mouseDY = 0;
-    this.dragging = false;
     this.mouseDown = false;
-    this._lx = 0;
-    this._ly = 0;
-    window.addEventListener('keydown', (e) => {
+    this.dragging = false;
+    this.canvas = canvas;
+    this._onKeyDown = (e) => {
       if (e.repeat) return;
       this.keys.add(e.code);
-      this.pressed.add(e.code);
-      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.code)) e.preventDefault();
-    });
-    window.addEventListener('keyup', (e) => this.keys.delete(e.code));
-    window.addEventListener('blur', () => { this.keys.clear(); this.dragging = false; });
-    window.addEventListener('mousedown', (e) => {
-      this.mouseDown = true;
-      this.dragging = true;
-      this._lx = e.clientX; this._ly = e.clientY;
-    });
-    window.addEventListener('mouseup', () => { this.mouseDown = false; this.dragging = false; });
-    window.addEventListener('mousemove', (e) => {
+      this.justPressed.add(e.code);
+      if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
+    };
+    this._onKeyUp = (e) => this.keys.delete(e.code);
+    this._onMouseMove = (e) => {
       if (!this.dragging) return;
-      this.mouseDX += e.clientX - this._lx;
-      this.mouseDY += e.clientY - this._ly;
-      this._lx = e.clientX; this._ly = e.clientY;
-    });
-    window.addEventListener('contextmenu', (e) => e.preventDefault());
+      this.mouseDX += e.movementX || 0;
+      this.mouseDY += e.movementY || 0;
+    };
+    this._onMouseDown = (e) => {
+      if (e.button === 0) { this.dragging = true; this.mouseDown = true; }
+    };
+    this._onMouseUp = (e) => {
+      if (e.button === 0) { this.dragging = false; this.mouseDown = false; }
+    };
+    this._onBlur = () => { this.keys.clear(); this.dragging = false; };
+    window.addEventListener('keydown', this._onKeyDown);
+    window.addEventListener('keyup', this._onKeyUp);
+    window.addEventListener('mousemove', this._onMouseMove);
+    window.addEventListener('mousedown', this._onMouseDown);
+    window.addEventListener('mouseup', this._onMouseUp);
+    window.addEventListener('blur', this._onBlur);
   }
 
-  down(code) { return this.keys.has(code); }
-  hit(code) { return this.pressed.has(code); }
-  consume(code) { this.pressed.delete(code); return this.keys.has(code); }
-
-  // Movement axes from WASD / arrows. x: strafe right, z: forward.
-  axes() {
-    let x = 0, z = 0;
-    if (this.down('KeyA') || this.down('ArrowLeft')) x -= 1;
-    if (this.down('KeyD') || this.down('ArrowRight')) x += 1;
-    if (this.down('KeyW') || this.down('ArrowUp')) z += 1;
-    if (this.down('KeyS') || this.down('ArrowDown')) z -= 1;
-    return { x, z };
+  down(code) {
+    return this.keys.has(code);
   }
-
-  get forward() { return this.down('KeyW') || this.down('ArrowUp'); }
-  get back() { return this.down('KeyS') || this.down('ArrowDown'); }
-  get handbrake() { return this.down('Space'); }
-  get run() { return this.down('ShiftLeft') || this.down('ShiftRight'); }
-  get fire() { return this.mouseDown; }
-
+  pressed(code) {
+    return this.justPressed.has(code);
+  }
+  axis(neg, pos) {
+    return (this.keys.has(pos) ? 1 : 0) - (this.keys.has(neg) ? 1 : 0);
+  }
+  /** Call once per frame after the game has read the edges. */
   endFrame() {
-    this.pressed.clear();
+    this.justPressed.clear();
     this.mouseDX = 0;
     this.mouseDY = 0;
+  }
+  dispose() {
+    window.removeEventListener('keydown', this._onKeyDown);
+    window.removeEventListener('keyup', this._onKeyUp);
+    window.removeEventListener('mousemove', this._onMouseMove);
+    window.removeEventListener('mousedown', this._onMouseDown);
+    window.removeEventListener('mouseup', this._onMouseUp);
+    window.removeEventListener('blur', this._onBlur);
   }
 }

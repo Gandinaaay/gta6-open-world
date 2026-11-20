@@ -1,61 +1,49 @@
 # Vice Bay: Blood & Destiny
 
-[![make.fun](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
-[![Rank](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/rank.svg)](https://make.fun/bounty/gta6-01)
-[![Reward](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/reward.svg)](https://make.fun/bounty/gta6-01)
+[![gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
+[![rank](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/rank.svg)](https://make.fun/bounty/gta6-01)
+[![reward](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/reward.svg)](https://make.fun/bounty/gta6-01)
 
-An original open-world crime game in the spirit of GTA 6, built for the
-[make.fun gta6-01 bounty](https://make.fun/bounty/gta6-01). Explore Vice Bay — a
-2 km × 2 km coastal city with 8 districts — on foot and by car, steal vehicles,
-outrun the police, and work through 10 linked story missions plus 8 side jobs.
-The city remembers every choice.
+An original open-world crime game built for the [make.fun gta6-01 bounty](https://make.fun/bounty/gta6-01). Explore Vice Bay — a 2 km × 2 km coastal city with 8 districts — on foot or behind the wheel, steal cars, outrun the VCPD, and fight your way through 10 story missions to take the throne of the city.
 
-## Play
+Nothing here comes from Rockstar's GTA or any commercial game: the city, characters, story and code are all original, built with Three.js (vendored locally) and plain static files. The game runs fully offline in a desktop browser — no network requests at runtime.
 
-Open `game/index.html` in desktop Chrome (the game runs offline from static
-files — no build step, no network). Or serve the repo and open
-`http://127.0.0.1:8080/game/`:
+## How to play
 
-```
-node serve.ts
-```
-
-## Controls
+Open `game/index.html` in a desktop browser (or serve the repo root, e.g. `node serve.ts`, then visit http://127.0.0.1:8080/).
 
 | Key | Action |
 | --- | --- |
-| WASD / arrows | Walk / drive |
-| Shift | Run |
-| Space | Jump / handbrake (in car) |
-| E | Enter / exit / steal car |
-| Mouse drag | Camera pitch / yaw |
-| Click | Shoot |
-| 1–5 | Switch weapon (fists, pistol, SMG, shotgun, rifle) |
+| WASD | Move / drive |
+| Space | Handbrake (in a car) / jump (on foot) |
+| E | Enter a car, steal it |
+| Mouse drag | Orbit the camera |
+| Click / F | Shoot (fists or the equipped gun) |
+| Q | Switch weapon |
 | R | Reload |
-| M | Mission list |
+| M | Missions menu (10 story + 8 side) |
+| B | Shop, when standing near one |
 | Esc | Pause |
+| N | Mute |
 
 ## Features
 
-- 8 districts: Downtown, Ocean Beach, Little Havana, Industrial Port, Rich
-  Hills, Airport, Criminal District, Highway Ring
-- Traffic with red lights and panicking pedestrians, wanted level 1–5 with
-  police pursuit and arrests
-- Combat: fists plus 4 guns, enemy AI, tracers, knockback, ammo/health drops
-- 10 story missions with an ending choice + 8 side missions (taxi, racing,
-  delivery, escape, packages, territory, time trial, rescue)
-- HUD with health, money, reputation, wanted stars, speed, compass and a
-  live minimap with a pulsing objective ring
-- Economy (shops, garage, upgrades), localStorage saves, day/night cycle
-  and rain weather
-- All sound synthesized with WebAudio; all textures painted on canvas at boot
+- **Open world:** 8 districts — Downtown, Ocean Beach, Little Havana, Industrial Port, Rich Hills, Airport, Criminal District and the Highway Ring — with a full road grid, neon signs, a beach pier, port cranes and an airport runway.
+- **Driving:** 7 vehicle types with arcade physics, handbrake drifting, damage smoke, headlights and brake lights.
+- **Traffic & pedestrians:** AI cars that follow lanes and stop at red lights; pedestrians who panic in the rain or when shots are fired.
+- **Wanted system:** 1–5 stars, police interceptors with flashing light bars, arrests on foot, and losing the cops by distance and time.
+- **Combat:** fists plus pistol, SMG, shotgun and rifle, with ammo, reloads, enemy AI that shoots back, tracers and knockback.
+- **Story:** 10 linked missions — Welcome to Vice Bay, A Dangerous Favor, Street Reputation, The Getaway, The Missing Deal, Betrayal, Night Run, The Hidden Truth, Final Assault, Blood & Destiny — plus 8 side missions (taxi, racing, deliveries, escapes, hidden packages, territory, time trial, rescues).
+- **HUD & minimap:** health, money, reputation, wanted stars, speed, compass and a live minimap with a pulsing objective ring and distance in metres.
+- **Economy & save:** shops, garage upgrades, and a localStorage save (money, reputation, story progress, time of day, weather).
+- **Atmosphere:** day/night cycle with a low sunset sun disc, rain weather, and all sound synthesized with WebAudio (engine hum, gunshots, sirens, mission stings). All textures are painted on canvas at boot.
 
-## Tech
+## Build
 
-Three.js r149 vendored locally (`game/vendor/three.min.js`), ES modules under
-`game/src/`, one module per job. `main.ts` (Node 22, stdlib only) copies
-`game/` + `screenshots/` to the output directory and writes `dossier.json`.
+`main.ts` (Node 22, stdlib only) copies `game/` and `screenshots/` to the output directory and writes `dossier.json` with the kit's `buildDossier`:
 
-## License
+```sh
+mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+```
 
-MIT
+Run it twice — the dossier is byte-identical every time.

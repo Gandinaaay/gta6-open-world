@@ -1,123 +1,152 @@
-// On-foot player: walk/run/jump, enter and exit cars.
-import { CFG } from './config.js';
-import { clamp } from './random.js';
+// Vice Bay — on-foot player: walk/run/jump, camera-relative movement, and
+// entering/exiting cars. The player is a simple articulated figure built
+// from boxes so it reads at any distance.
 
-function collideAABB(pos, r, colliders) {
-  for (const c of colliders) {
-    const dx = pos.x - clamp(pos.x, c.x - c.hw, c.x + c.hw);
-    const dz = pos.z - clamp(pos.z, c.z - c.hd, c.z + c.hd);
-    const d2 = dx * dx + dz * dz;
-    if (d2 < r * r) {
-      const d = Math.sqrt(d2) || 0.001;
-      pos.x += (dx / d) * (r - d);
-      pos.z += (dz / d) * (r - d);
-    }
-  }
-}
+import { CFG } from './config.js';
 
 export class Player {
   constructor(scene) {
-    this.pos = new THREE.Vector3(20, 0, 120);
+    this.scene = scene;
+    this.pos = new THREE.Vector3(0, 0, 40);
     this.vel = new THREE.Vector3();
-    this.yaw = 0;
+    this.heading = Math.PI;
     this.onGround = true;
-    this.vy = 0;
-    this.health = CFG.startHealth;
-    this.inCar = null;
-    this.squash = 0; // landing squash timer
-    this.strafeLean = 0;
+    this.health = 100;
+    this.maxHealth = 100;
+    this.vehicle = null;
     this.group = new THREE.Group();
-    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2f6fb2 });
-    const skinMat = new THREE.MeshLambertMaterial({ color: 0xd8a070 });
-    const pantsMat = new THREE.MeshLambertMaterial({ color: 0x222831 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.9, 0.4), bodyMat);
-    body.position.y = 1.05;
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), skinMat);
-    head.position.y = 1.75;
-    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.7, 0.32), pantsMat);
-    legL.position.set(-0.18, 0.35, 0);
-    const legR = legL.clone();
-    legR.position.x = 0.18;
-    this.legL = legL; this.legR = legR;
-    this.bodyMesh = body;
-    this.group.add(body, head, legL, legR);
+    this.group.name = 'player';
+    const skin = new THREE.MeshLambertMaterial({ color: 0xd9a066 });
+    const shirt = new THREE.MeshLambertMaterial({ color: 0x2e86c1 });
+    const pants = new THREE.MeshLambertMaterial({ color: 0x222831 });
+    const hair = new THREE.MeshLambertMaterial({ color: 0x1a1a1a });
+    // Torso, head, limbs.
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.62, 0.78, 0.34), shirt);
+    torso.position.y = 1.05;
+    torso.castShadow = true;
+    this.group.add(torso);
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.42, 0.4), skin);
+    head.position.y = 1.68;
+    head.castShadow = true;
+    this.group.add(head);
+    const hairMesh = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.14, 0.42), hair);
+    hairMesh.position.y = 1.92;
+    this.group.add(hairMesh);
+    this.legL = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.72, 0.26), pants);
+    this.legL.position.set(-0.17, 0.36, 0);
+    this.group.add(this.legL);
+    this.legR = this.legL.clone();
+    this.legR.position.x = 0.17;
+    this.group.add(this.legR);
+    this.armL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.66, 0.22), shirt);
+    this.armL.position.set(-0.42, 1.1, 0);
+    this.group.add(this.armL);
+    this.armR = this.armL.clone();
+    this.armR.position.x = 0.42;
+    this.group.add(this.armR);
+    this.walkPhase = 0;
     this.group.position.copy(this.pos);
     scene.add(this.group);
-    this._walkPhase = 0;
   }
 
-  get speed() { return Math.hypot(this.vel.x, this.vel.z); }
+  get speed() {
+    return this.vel.length();
+  }
 
-  update(dt, input, camYaw, colliders, audio) {
-    if (this.inCar) {
-      this.group.visible = false;
-      return;
-    }
-    this.group.visible = true;
-    const ax = input.axes();
-    const run = input.run;
-    const speed = run ? CFG.runSpeed : CFG.walkSpeed;
-    const sin = Math.sin(camYaw), cos = Math.cos(camYaw);
-    // Camera-relative movement: W is away from camera.
-    const mx = (-sin * ax.z + cos * ax.x);
-    const mz = (-cos * ax.z - sin * ax.x);
-    const moving = Math.abs(mx) + Math.abs(mz) > 0;
-    if (moving) {
-      const len = Math.hypot(mx, mz) || 1;
-      this.vel.x = (mx / len) * speed;
-      this.vel.z = (mz / len) * speed;
-      this.yaw = Math.atan2(mx, mz);
-      this._walkPhase += dt * speed * 1.6;
-      this.legL.rotation.x = Math.sin(this._walkPhase) * 0.7;
-      this.legR.rotation.x = -Math.sin(this._walkPhase) * 0.7;
-      this.strafeLean = clamp(ax.x * 0.12, -0.15, 0.15);
+  update(dt, input, camYaw, colliders, cars) {
+    if (this.vehicle) return; // driving is the car's job
+    const run = input.down('ShiftLeft') || input.down('ShiftRight');
+    const speed = run ? CFG.playerRun : CFG.playerWalk;
+    const fwd = input.axis('KeyS', 'KeyW');
+    const strafe = input.axis('KeyA', 'KeyD');
+    const sin = Math.sin(camYaw);
+    const cos = Math.cos(camYaw);
+    // Camera-relative movement: camera sits at +sin/cos behind the target,
+    // so forward (away from camera) is (-sin, -cos) and right is (cos, -sin).
+    const mx = -sin * fwd + cos * strafe;
+    const mz = -cos * fwd - sin * strafe;
+    const len = Math.hypot(mx, mz);
+    if (len > 0.01) {
+      const nx = mx / len;
+      const nz = mz / len;
+      this.vel.x = nx * speed;
+      this.vel.z = nz * speed;
+      this.heading = Math.atan2(nx, nz);
+      this.walkPhase += dt * speed * 1.6;
     } else {
-      this.vel.x *= Math.pow(0.0001, dt);
-      this.vel.z *= Math.pow(0.0001, dt);
-      this.legL.rotation.x *= 0.8;
-      this.legR.rotation.x *= 0.8;
-      this.strafeLean *= 0.8;
+      this.vel.x *= Math.max(0, 1 - dt * 10);
+      this.vel.z *= Math.max(0, 1 - dt * 10);
     }
-    // Jump.
-    if (input.hit('Space') && this.onGround) {
-      this.vy = CFG.jumpSpeed;
+    // Jump + gravity.
+    if (input.pressed('Space') && this.onGround) {
+      this.vel.y = CFG.playerJump;
       this.onGround = false;
-      if (audio) audio.jump();
-      input.consume('Space');
     }
-    this.vy -= CFG.gravity * dt;
-    this.pos.y += this.vy * dt;
-    if (this.pos.y <= 0) {
-      if (!this.onGround && this.vy < -6) this.squash = 0.18; // landing squash
-      this.pos.y = 0;
-      this.vy = 0;
-      this.onGround = true;
-    }
-    this.pos.x += this.vel.x * dt;
-    this.pos.z += this.vel.z * dt;
-    this.pos.x = clamp(this.pos.x, -CFG.half + 5, CFG.half - 5);
-    this.pos.z = clamp(this.pos.z, -CFG.half + 5, CFG.half - 5);
-    collideAABB(this.pos, 0.6, colliders);
-    // Landing squash + strafe lean on the mesh.
-    this.squash = Math.max(0, this.squash - dt);
-    const sq = 1 - this.squash * 0.9;
-    this.group.scale.set(1 + (1 - sq) * 0.6, sq, 1 + (1 - sq) * 0.6);
-    this.group.rotation.z = this.strafeLean;
+    this.vel.y -= CFG.gravity * dt;
+    const nx2 = this.pos.x + this.vel.x * dt;
+    const nz2 = this.pos.z + this.vel.z * dt;
+    // Collide with building AABBs (slide along the blocked axis).
+    const blocked = (x, z) => {
+      for (const c of colliders) {
+        if (Math.abs(x - c.x) < c.hx + 0.4 && Math.abs(z - c.z) < c.hz + 0.4) return true;
+      }
+      return false;
+    };
+    if (!blocked(nx2, this.pos.z)) this.pos.x = nx2;
+    if (!blocked(this.pos.x, nz2)) this.pos.z = nz2;
+    this.pos.x = Math.max(-980, Math.min(980, this.pos.x));
+    this.pos.z = Math.max(-980, Math.min(980, this.pos.z));
+    this.pos.y += this.vel.y * dt;
+    if (this.pos.y <= 0) { this.pos.y = 0; this.vel.y = 0; this.onGround = true; }
+    // Walk-cycle limb swing.
+    const swing = len > 0.01 ? Math.sin(this.walkPhase) * 0.6 : 0;
+    this.legL.rotation.x = swing;
+    this.legR.rotation.x = -swing;
+    this.armL.rotation.x = -swing * 0.7;
+    this.armR.rotation.x = swing * 0.7;
+    // Lean into strafes, squash on landing.
     this.group.position.copy(this.pos);
-    this.group.rotation.y = this.yaw;
+    this.group.rotation.y = this.heading;
+    this.group.rotation.z = strafe * -0.06;
+    const landSquash = this.onGround ? 1 : 1.04;
+    this.group.scale.set(1, landSquash, 1);
   }
 
-  enterCar(car) {
-    this.inCar = car;
+  nearestCar(cars, maxDist = 4) {
+    let best = null;
+    let bestD = maxDist;
+    for (const car of cars) {
+      const d = Math.hypot(car.pos.x - this.pos.x, car.pos.z - this.pos.z);
+      if (d < bestD) { bestD = d; best = car; }
+    }
+    return best;
+  }
+
+  enterVehicle(car) {
+    this.vehicle = car;
+    car.driver = this;
     this.group.visible = false;
   }
 
-  exitCar() {
-    if (!this.inCar) return;
-    const c = this.inCar;
-    this.inCar = null;
-    const side = new THREE.Vector3(Math.cos(c.heading), 0, -Math.sin(c.heading));
-    this.pos.set(c.pos.x + side.x * 2.5, 0, c.pos.z + side.z * 2.5);
+  exitVehicle() {
+    if (!this.vehicle) return;
+    const car = this.vehicle;
+    car.driver = null;
+    this.vehicle = null;
+    // Step out to the side of the car.
+    const side = new THREE.Vector3(Math.cos(car.heading), 0, -Math.sin(car.heading));
+    this.pos.copy(car.pos).addScaledVector(side, 2.4);
+    this.pos.y = 0;
     this.group.visible = true;
+    this.group.position.copy(this.pos);
+  }
+
+  takeDamage(n) {
+    this.health = Math.max(0, this.health - n);
+    return this.health <= 0;
+  }
+
+  heal(n) {
+    this.health = Math.min(this.maxHealth, this.health + n);
   }
 }

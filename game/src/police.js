@@ -1,132 +1,113 @@
-// Wanted level 1-5, police pursuit, arrest, losing the cops.
+// Vice Bay — wanted level 1-5, police pursuit cars that steer to an
+// intercept point ahead of the player, arrest on foot contact, and losing
+// the cops by distance + time.
+
 import { CFG } from './config.js';
-import { clamp, range } from './random.js';
 
 export class Police {
-  constructor(scene, vehicleMgr) {
+  constructor(scene, carManager, audio) {
     this.scene = scene;
-    this.vm = vehicleMgr;
+    this.carManager = carManager;
+    this.audio = audio;
+    this.wanted = 0;
+    this.heat = 0; // 0..100, wanted = ceil(heat / 20)
+    this.loseTimer = 0;
+    this.pursuitCars = [];
+    this.spawnTimer = 0;
+    this.arrested = false;
+    this.bustedTimer = 0;
+  }
+
+  addHeat(n) {
+    this.heat = Math.min(100, this.heat + n);
+    const level = Math.ceil(this.heat / 20);
+    if (level > this.wanted) {
+      this.wanted = level;
+      this.audio.sting();
+    }
+  }
+
+  clearWanted() {
     this.wanted = 0;
     this.heat = 0;
-    this.cops = [];
     this.loseTimer = 0;
-    this.decayTimer = 0;
-    this._flashT = 0;
-    this.onBusted = null; // set by main.js
-    this.onWantedChange = null; // set by main.js (hud flash + sting)
+    this._despawnPursuit();
+    this.audio.setSiren(false);
   }
 
-  addHeat(n, audio) {
-    const before = this.wanted;
-    this.heat += n;
-    this.wanted = clamp(Math.floor(this.heat / 2) + (this.heat > 0 ? 1 : 0), 0, 5);
-    if (this.wanted > before) {
-      this.spawnPursuit();
-      if (this.onWantedChange) this.onWantedChange(this.wanted);
-      if (audio) audio.wanted();
-    }
+  _despawnPursuit() {
+    for (const car of this.pursuitCars) this.carManager.remove(car);
+    this.pursuitCars = [];
   }
 
-  setWanted(n, audio) {
-    const before = this.wanted;
-    this.wanted = clamp(n, 0, 5);
-    this.heat = n * 2;
-    if (this.wanted > before) {
-      this.spawnPursuit();
-      if (this.onWantedChange) this.onWantedChange(this.wanted);
-      if (audio) audio.wanted();
-    }
+  _spawnPursuitCar(playerPos) {
+    const a = Math.random() * Math.PI * 2;
+    const d = 90 + Math.random() * 60;
+    const x = Math.max(-900, Math.min(900, playerPos.x + Math.sin(a) * d));
+    const z = Math.max(-900, Math.min(900, playerPos.z + Math.cos(a) * d));
+    const car = this.carManager.spawn('police', x, z, Math.atan2(playerPos.x - x, playerPos.z - z));
+    car.driver = 'ai';
+    this.pursuitCars.push(car);
   }
 
-  spawnPursuit() {
-    const want = this.wanted + 1;
-    while (this.cops.length < want) {
-      const a = Math.random() * Math.PI * 2;
-      const x = clamp(Math.cos(a) * 120, -900, 900);
-      const z = clamp(Math.sin(a) * 120, -900, 900);
-      const car = this.vm.spawn('police', x, z, a, { ai: true });
-      car.speed = 20;
-      this.cops.push(car);
-    }
-  }
-
-  clearCops() {
-    for (const c of this.cops) this.vm.remove(c);
-    this.cops = [];
-  }
-
-  update(dt, playerPos, playerVel, playerOnFoot, audio) {
-    this._flashT += dt;
-    // Flashing light bars on pursuit cars.
-    const on = Math.floor(this._flashT * 4) % 2 === 0;
-    for (const c of this.cops) {
-      if (c.barL) c.barL.material.color.setHex(on ? 0xff0000 : 0x330000);
-      if (c.barR) c.barR.material.color.setHex(on ? 0x330000 : 0x2244ff);
-    }
-    if (this.wanted === 0) {
-      if (this.cops.length) this.clearCops();
-      if (audio) audio.setSiren(false);
+  update(dt, player, colliders) {
+    if (this.arrested) {
+      this.bustedTimer -= dt;
       return;
     }
-    if (audio) audio.setSiren(true);
-    // Pursuit: steer each cop toward the intercept point (0.5 s ahead of the player).
-    const ix = playerPos.x + playerVel.x * 0.5;
-    const iz = playerPos.z + playerVel.z * 0.5;
+    // Wanted decays slowly when no new crime happens.
+    if (this.wanted > 0) this.heat = Math.max(0, this.heat - CFG.wantedDecayPerSec * 100 * dt * 0.2);
+    const level = Math.ceil(this.heat / 20);
+    if (level !== this.wanted) this.wanted = level;
+    const playerPos = player.vehicle ? player.vehicle.pos : player.pos;
+    const playerSpeed = player.vehicle ? Math.abs(player.vehicle.speed) : player.speed;
+    // Maintain pursuit fleet: wanted level = number of cars (capped).
+    const wantCars = Math.min(this.wanted, CFG.maxPoliceCars);
+    this.spawnTimer -= dt;
+    if (this.pursuitCars.length < wantCars && this.spawnTimer <= 0) {
+      this._spawnPursuitCar(playerPos);
+      this.spawnTimer = 2.5;
+    }
+    this.audio.setSiren(this.pursuitCars.length > 0);
+    // Lose-the-cops: far away + slow for long enough.
     let nearest = Infinity;
-    for (const c of this.cops) {
-      const dx = ix - c.pos.x, dz = iz - c.pos.z;
-      const dist = Math.hypot(dx, dz);
-      nearest = Math.min(nearest, dist);
-      const wantHeading = Math.atan2(dx, dz);
-      let dh = wantHeading - c.heading;
-      while (dh > Math.PI) dh -= Math.PI * 2;
-      while (dh < -Math.PI) dh += Math.PI * 2;
-      c.heading += clamp(dh, -2.4 * dt, 2.4 * dt);
-      const top = 46 + this.wanted * 3;
-      c.speed = clamp(c.speed + (top - c.speed) * dt * 0.5, 0, top);
-      c.pos.x += Math.sin(c.heading) * c.speed * dt;
-      c.pos.z += Math.cos(c.heading) * c.speed * dt;
-      c.mesh.position.copy(c.pos);
-      c.mesh.rotation.y = c.heading - Math.PI / 2;
-      for (const w of c.wheels) w.rotation.z -= c.speed * dt * 2.2;
-      // Ram the player's car.
-      if (!playerOnFoot && dist < 5) {
-        c.speed *= 0.6;
-      }
+    for (const car of this.pursuitCars) {
+      nearest = Math.min(nearest, Math.hypot(car.pos.x - playerPos.x, car.pos.z - playerPos.z));
     }
-    // Arrest: a cop car stopped next to the player on foot.
-    if (playerOnFoot && nearest < 4) {
-      this.busted();
-      return;
-    }
-    // Lose the cops: no cop within 120 m for 12 s.
-    if (nearest > 120) {
+    if (this.wanted > 0 && nearest > CFG.wantedLoseDistance && playerSpeed < 8) {
       this.loseTimer += dt;
-      if (this.loseTimer > 12) {
-        this.loseTimer = 0;
-        this.wanted = Math.max(0, this.wanted - 1);
-        this.heat = this.wanted * 2;
-        if (this.wanted === 0) this.clearCops();
-      }
+      if (this.loseTimer > CFG.wantedLoseTime) this.clearWanted();
     } else {
       this.loseTimer = 0;
     }
-    // Slow heat decay while hidden.
-    if (nearest > 150) {
-      this.decayTimer += dt;
-      if (this.decayTimer > 5 && this.wanted > 0) {
-        this.decayTimer = 0;
-        this.wanted = Math.max(0, this.wanted - 1);
-        this.heat = this.wanted * 2;
-        if (this.wanted === 0) this.clearCops();
+    // Pursuit steering: aim at an intercept point ahead of the player.
+    for (const car of this.pursuitCars) {
+      const lead = 0.6;
+      const tx = playerPos.x + Math.sin(player.vehicle ? player.vehicle.heading : player.heading) * playerSpeed * lead;
+      const tz = playerPos.z + Math.cos(player.vehicle ? player.vehicle.heading : player.heading) * playerSpeed * lead;
+      const desired = Math.atan2(tx - car.pos.x, tz - car.pos.z);
+      let diff = desired - car.heading;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+      const steer = Math.max(-1, Math.min(1, diff * 1.6));
+      car.update(dt, { throttle: 1, steer, brake: false, handbrake: false }, colliders);
+      // Ram the player: bump + damage on contact.
+      const d = Math.hypot(car.pos.x - playerPos.x, car.pos.z - playerPos.z);
+      if (d < 3.4) {
+        if (player.vehicle) {
+          player.vehicle.damage(4);
+          player.vehicle.speed *= 0.6;
+        } else {
+          // Arrest on foot contact with a slow cop car.
+          if (Math.abs(car.speed) < 6) {
+            this.arrested = true;
+            this.bustedTimer = 3;
+            this.audio.setSiren(false);
+          } else {
+            player.takeDamage(6);
+          }
+        }
       }
     }
-  }
-
-  busted() {
-    this.wanted = 0;
-    this.heat = 0;
-    this.clearCops();
-    if (this.onBusted) this.onBusted();
   }
 }

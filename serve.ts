@@ -1,36 +1,39 @@
-// Tiny static file server for local play-testing (port 8080, repo root).
+// Vice Bay — tiny static file server for local play-testing.
+// Serves the repository directory on port 8080. Node stdlib only.
+
 import { createServer } from 'node:http';
-import { createReadStream, existsSync, statSync } from 'node:fs';
-import { extname, join, normalize, resolve } from 'node:path';
+import { readFileSync, existsSync, statSync } from 'node:fs';
+import { join, extname } from 'node:path';
 
-const root = process.cwd();
-const port = Number(process.env.PORT || 8080);
+const ROOT = process.cwd();
+const PORT = 8080;
 
-const TYPES = {
+const MIME = {
   '.html': 'text/html',
   '.js': 'text/javascript',
   '.mjs': 'text/javascript',
-  '.ts': 'text/plain',
   '.css': 'text/css',
   '.json': 'application/json',
+  '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
-  '.png': 'image/png',
-  '.svg': 'image/svg+xml',
-  '.md': 'text/markdown',
+  '.ts': 'text/plain',
+  '.md': 'text/plain',
 };
 
 const server = createServer((req, res) => {
-  const url = decodeURIComponent((req.url || '/').split('?')[0]);
-  const rel = normalize(url === '/' ? 'index.html' : url.replace(/^\/+/, ''));
-  const file = resolve(join(root, rel));
-  if (!file.startsWith(root) || !existsSync(file) || !statSync(file).isFile()) {
-    res.writeHead(404, { 'content-type': 'text/plain' });
+  const urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  let filePath = join(ROOT, urlPath === '/' ? 'game/index.html' : urlPath);
+  if (!existsSync(filePath) || !statSync(filePath).isFile()) {
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
     res.end('not found');
     return;
   }
-  res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream' });
-  createReadStream(file).pipe(res);
+  const ext = extname(filePath).toLowerCase();
+  res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+  res.end(readFileSync(filePath));
 });
 
-server.listen(port, () => console.log(`serving ${root} on http://127.0.0.1:${port}/`));
+server.listen(PORT, '127.0.0.1', () => {
+  console.log(`serving ${ROOT} on http://127.0.0.1:${PORT}/`);
+});

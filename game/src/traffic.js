@@ -1,119 +1,154 @@
-// AI traffic on the road grid + pedestrians on sidewalks.
-import { CFG } from './config.js';
-import { makeRng, range, pick, clamp } from './random.js';
+// Vice Bay — ambient life: AI traffic cars that follow the road grid and
+// stop at red lights, plus pedestrians who walk the sidewalks and panic
+// (run away from the player) in the rain or when a gun fires.
 
-const AXES = [0, Math.PI / 2, Math.PI, -Math.PI / 2];
+import { CFG } from './config.js';
+import { RNG } from './random.js';
+
+const LIGHT_CYCLE = 14; // seconds of green/red per phase
 
 export class Traffic {
-  constructor(scene, vehicleMgr, colliders) {
+  constructor(scene, city, carManager, seed = 4242) {
     this.scene = scene;
-    this.vm = vehicleMgr;
-    this.colliders = colliders;
-    this.rng = makeRng(4242);
+    this.city = city;
+    this.carManager = carManager;
+    this.rng = new RNG(seed);
     this.cars = [];
     this.peds = [];
-    this.time = 0;
+    this.lightTimer = 0;
+    this.lightGreenNS = true; // north-south green, east-west red
+    this._spawnCars();
+    this._spawnPeds();
+  }
+
+  _spawnCars() {
     const types = ['sedan', 'sedan', 'suv', 'taxi', 'truck', 'sport'];
-    for (let i = 0; i < 26; i++) {
-      const street = pick(this.rng, [-800, -600, -400, -200, 0, 200, 400, 600, 800]);
-      const along = range(this.rng, -850, 850);
-      const axis = this.rng() < 0.5 ? 'x' : 'z';
-      const heading = pick(this.rng, AXES);
-      const x = axis === 'x' ? along : street + (heading === Math.PI / 2 ? 3.5 : -3.5);
-      const z = axis === 'x' ? street + (heading === 0 ? 3.5 : -3.5) : along;
-      const car = this.vm.spawn(pick(this.rng, types), x, z, heading, { ai: true });
-      car.speed = range(this.rng, 8, 14);
-      car.targetSpeed = car.speed;
+    for (let i = 0; i < CFG.maxTrafficCars; i++) {
+      const alongX = this.rng.chance(0.5);
+      const road = this.rng.pick(this.city.roads);
+      const lane = this.rng.chance(0.5) ? 3.5 : -3.5;
+      const t = this.rng.float(-780, 780);
+      const type = this.rng.pick(types);
+      const car = this.carManager.spawn(type, alongX ? t : road + lane, alongX ? road + lane : t, alongX ? 0 : Math.PI / 2);
+      car.driver = 'ai';
+      car.ai = {
+        alongX,
+        road,
+        lane,
+        speed: this.rng.float(9, 15),
+        dir: this.rng.chance(0.5) ? 1 : -1,
+      };
       this.cars.push(car);
     }
-    // Pedestrians.
-    const pedColors = [0xc0392b, 0x27ae60, 0x8e44ad, 0xe67e22, 0x16a085, 0xd35400];
-    for (let i = 0; i < 24; i++) {
+  }
+
+  _spawnPeds() {
+    const shirtColors = [0xe74c3c, 0x3498db, 0x2ecc71, 0xf39c12, 0x9b59b6, 0xecf0f1, 0x1abc9c];
+    for (let i = 0; i < CFG.maxPedestrians; i++) {
       const g = new THREE.Group();
-      const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.35), new THREE.MeshLambertMaterial({ color: pick(this.rng, pedColors) }));
-      body.position.y = 1.0;
-      const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshLambertMaterial({ color: 0xd8a070 }));
-      head.position.y = 1.65;
-      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.3), new THREE.MeshLambertMaterial({ color: 0x222831 }));
-      leg.position.y = 0.3;
-      g.add(body, head, leg);
-      const street = pick(this.rng, [-700, -400, -100, 100, 400, 700]);
-      const along = range(this.rng, -850, 850);
-      const axis = this.rng() < 0.5 ? 'x' : 'z';
-      const px = axis === 'x' ? along : street + 11;
-      const pz = axis === 'x' ? street + 11 : along;
-      g.position.set(px, 0, pz);
-      scene.add(g);
-      this.peds.push({ mesh: g, pos: g.position, heading: pick(this.rng, AXES), speed: range(this.rng, 1.1, 1.8), panic: 0, phase: this.rng() * 6 });
+      const shirt = new THREE.MeshLambertMaterial({ color: this.rng.pick(shirtColors) });
+      const skin = new THREE.MeshLambertMaterial({ color: 0xc98d5e });
+      const pants = new THREE.MeshLambertMaterial({ color: 0x2c3e50 });
+      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.7, 0.3), shirt);
+      torso.position.y = 1.0;
+      g.add(torso);
+      const head = new THREE.Mesh(new THREE.BoxGeometry(0.38, 0.38, 0.36), skin);
+      head.position.y = 1.58;
+      g.add(head);
+      for (const sx of [-0.15, 0.15]) {
+        const leg = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.65, 0.22), pants);
+        leg.position.set(sx, 0.33, 0);
+        g.add(leg);
+      }
+      const x = this.rng.float(-780, 780);
+      const z = this.rng.float(-780, 780);
+      g.position.set(x, 0, z);
+      this.scene.add(g);
+      this.peds.push({
+        group: g,
+        pos: g.position,
+        heading: this.rng.float(0, Math.PI * 2),
+        speed: this.rng.float(1.2, 2.4),
+        panic: 0,
+        phase: this.rng.float(0, Math.PI * 2),
+        targetRoad: this.rng.pick(this.city.roads),
+      });
     }
   }
 
-  // True when the light is red for travel along `axis` ('x' or 'z').
-  lightRed(axis) {
-    const phase = Math.floor(this.time / CFG.lightCycle) % 2;
-    return (axis === 'x') === (phase === 1);
-  }
-
-  update(dt, world, playerPos, gunshot) {
-    this.time += dt;
-    const raining = world.weather === 'rain';
-    for (const car of this.cars) {
-      const axis = Math.abs(Math.sin(car.heading)) < 0.5 ? 'z' : 'x';
-      // Stop at red lights near an intersection.
-      let want = car.targetSpeed;
-      const along = axis === 'z' ? car.pos.z : car.pos.x;
-      const near = Math.abs(((along % 100) + 100) % 100);
-      const distToLine = Math.min(near, 100 - near);
-      if (distToLine < 12 && this.lightRed(axis)) want = 0;
-      // Don't rear-end the car ahead.
-      for (const o of this.cars) {
-        if (o === car) continue;
-        const dx = o.pos.x - car.pos.x, dz = o.pos.z - car.pos.z;
-        const ahead = dx * Math.sin(car.heading) + dz * Math.cos(car.heading);
-        const side = Math.abs(dx * Math.cos(car.heading) - dz * Math.sin(car.heading));
-        if (ahead > 0 && ahead < 12 && side < 3) { want = 0; break; }
-      }
-      // Swerve gently around a stopped player car.
-      car.speed += clamp(want - car.speed, -14 * dt, 8 * dt);
-      // At an intersection, sometimes turn.
-      if (distToLine < 2 && this.rng() < 0.25) {
-        car.heading += pick(this.rng, [-Math.PI / 2, Math.PI / 2]);
-      }
-      car.pos.x += Math.sin(car.heading) * car.speed * dt;
-      car.pos.z += Math.cos(car.heading) * car.speed * dt;
-      car.pos.x = clamp(car.pos.x, -CFG.half + 3, CFG.half - 3);
-      car.pos.z = clamp(car.pos.z, -CFG.half + 3, CFG.half - 3);
-      car.mesh.position.copy(car.pos);
-      car.mesh.rotation.y = car.heading - Math.PI / 2;
-      for (const w of car.wheels) w.rotation.z -= car.speed * dt * 2.2;
-    }
+  panicAt(x, z, radius = 40) {
     for (const p of this.peds) {
-      // Panic: rain, gunshots, or the player sprinting close.
-      if (raining) p.panic = Math.max(p.panic, 1);
-      if (gunshot) p.panic = 2;
-      if (playerPos && Math.hypot(p.pos.x - playerPos.x, p.pos.z - playerPos.z) < 5) p.panic = Math.max(p.panic, 1.5);
-      p.panic = Math.max(0, p.panic - dt * 0.25);
-      const speed = p.panic > 0 ? 4.2 : p.speed;
-      p.phase += dt * speed * 2;
-      // Pedestrians walk along sidewalks; panicking ones run away from the player.
-      let hx = Math.sin(p.heading), hz = Math.cos(p.heading);
-      if (p.panic > 0 && playerPos) {
-        const dx = p.pos.x - playerPos.x, dz = p.pos.z - playerPos.z;
-        const d = Math.hypot(dx, dz) || 1;
-        hx = dx / d; hz = dz / d;
-        p.heading = Math.atan2(hx, hz);
+      const d = Math.hypot(p.pos.x - x, p.pos.z - z);
+      if (d < radius) {
+        p.panic = 3 + Math.random() * 3;
+        p.heading = Math.atan2(p.pos.x - x, p.pos.z - z);
       }
-      p.pos.x += hx * speed * dt;
-      p.pos.z += hz * speed * dt;
-      if (Math.abs(p.pos.x) > 950 || Math.abs(p.pos.z) > 950) {
-        p.heading += Math.PI;
-        p.pos.x = clamp(p.pos.x, -940, 940);
-        p.pos.z = clamp(p.pos.z, -940, 940);
+    }
+  }
+
+  update(dt, playerPos, raining) {
+    this.lightTimer += dt;
+    if (this.lightTimer > LIGHT_CYCLE) {
+      this.lightTimer = 0;
+      this.lightGreenNS = !this.lightGreenNS;
+    }
+    // Traffic cars: cruise along their road, stop at red, swerve around
+    // anything slow ahead of them.
+    for (const car of this.cars) {
+      const ai = car.ai;
+      const atIntersection = Math.abs((ai.alongX ? car.pos.z : car.pos.x) % CFG.blockSize) < 12;
+      const green = ai.alongX ? !this.lightGreenNS : this.lightGreenNS;
+      let targetSpeed = ai.speed;
+      if (atIntersection && !green) targetSpeed = 0;
+      // Car ahead in the same lane?
+      for (const other of this.carManager.cars) {
+        if (other === car) continue;
+        const dx = other.pos.x - car.pos.x;
+        const dz = other.pos.z - car.pos.z;
+        const ahead = ai.alongX ? Math.abs(dz) < 4 && dx * ai.dir > 0 && dx * ai.dir < 12
+          : Math.abs(dx) < 4 && dz * ai.dir > 0 && dz * ai.dir < 12;
+        if (ahead) { targetSpeed = 0; break; }
       }
-      // Snap back onto a sidewalk line when drifting off-grid.
-      p.mesh.position.copy(p.pos);
-      p.mesh.rotation.y = p.heading;
-      p.mesh.position.y = Math.abs(Math.sin(p.phase)) * 0.06;
+      const desired = targetSpeed * ai.dir;
+      car.speed += (desired - car.speed) * Math.min(1, dt * 1.5);
+      car.heading = ai.alongX ? (ai.dir > 0 ? Math.PI / 2 : -Math.PI / 2) : (ai.dir > 0 ? 0 : Math.PI);
+      // Move along the road (bypass the arcade physics: traffic is scripted).
+      if (ai.alongX) {
+        car.pos.x += car.speed * dt;
+        car.pos.z = ai.road + ai.lane;
+        if (car.pos.x > 820) car.pos.x = -820;
+        if (car.pos.x < -820) car.pos.x = 820;
+      } else {
+        car.pos.z += car.speed * dt;
+        car.pos.x = ai.road + ai.lane;
+        if (car.pos.z > 820) car.pos.z = -820;
+        if (car.pos.z < -820) car.pos.z = 820;
+      }
+      car.group.position.copy(car.pos);
+      car.group.rotation.y = car.heading;
+      for (const w of car.wheels) w.rotation.x += car.speed * dt * 0.8;
+    }
+    // Pedestrians: stroll the sidewalks, run when panicked or in rain.
+    for (const p of this.peds) {
+      if (raining && p.panic <= 0) p.panic = 0.5;
+      const speed = p.panic > 0 ? 6.5 : p.speed;
+      if (p.panic > 0) p.panic -= dt;
+      p.pos.x += Math.sin(p.heading) * speed * dt;
+      p.pos.z += Math.cos(p.heading) * speed * dt;
+      // Wander: gently change direction, stay in the city.
+      if (Math.random() < dt * 0.15) p.heading += (Math.random() - 0.5) * 1.2;
+      if (Math.abs(p.pos.x) > 780 || Math.abs(p.pos.z) > 780) p.heading += Math.PI;
+      p.phase += dt * speed * 3;
+      p.group.rotation.y = p.heading;
+      p.group.position.y = Math.abs(Math.sin(p.phase)) * 0.06;
+      // Scare pedestrians when the player drives at them.
+      if (playerPos) {
+        const d = Math.hypot(p.pos.x - playerPos.x, p.pos.z - playerPos.z);
+        if (d < 6 && p.panic <= 0) {
+          p.panic = 2;
+          p.heading = Math.atan2(p.pos.x - playerPos.x, p.pos.z - playerPos.z);
+        }
+      }
     }
   }
 }
