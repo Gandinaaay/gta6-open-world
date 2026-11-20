@@ -1,199 +1,160 @@
-// Vice Bay — combat: fists + 4 guns, ammo and reloads, enemy AI that
-// shoots back, tracers, hit knockback, and ammo/health pickups.
+// Combat: fists + 4 guns, hitscan shooting, tracers, enemy AI, pickups.
 
-import { WEAPONS, WEAPON_ORDER } from './config.js';
+import { WEAPONS } from './config.js';
 
-export class Combat {
-  constructor(scene, audio) {
-    this.scene = scene;
-    this.audio = audio;
-    this.weaponIndex = 0;
-    this.ammo = { pistol: 48, smg: 90, shotgun: 18, rifle: 60 };
-    this.mag = { pistol: 12, smg: 30, shotgun: 6, rifle: 24 };
-    this.cooldown = 0;
-    this.reloading = 0;
-    this.tracers = [];
-    this.enemies = [];
-    this.pickups = [];
-    this._tracerMat = new THREE.LineBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.9 });
-  }
+export function createCombat(scene, audio, onKill) {
+  const raycaster = new THREE.Raycaster();
+  const enemies = [];
+  const tracers = [];
+  const pickups = [];
+  let current = 'pistol';
+  const ammo = { pistol: 36, smg: 64, shotgun: 12, rifle: 20 };
+  const mag = { pistol: 12, smg: 32, shotgun: 6, rifle: 20 };
+  let cooldown = 0;
+  let reloading = 0;
 
-  get weaponId() {
-    return WEAPON_ORDER[this.weaponIndex];
-  }
-  get weapon() {
-    return WEAPONS[this.weaponId];
-  }
-
-  cycleWeapon(dir = 1) {
-    this.weaponIndex = (this.weaponIndex + dir + WEAPON_ORDER.length) % WEAPON_ORDER.length;
-    this.reloading = 0;
-  }
-
-  spawnEnemy(x, z, hp = 60) {
+  function spawnEnemy(x, z) {
     const g = new THREE.Group();
-    const shirt = new THREE.MeshLambertMaterial({ color: 0x8e2f2f });
-    const skin = new THREE.MeshLambertMaterial({ color: 0xb98a5e });
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.75, 0.32), shirt);
-    torso.position.y = 1.02;
-    g.add(torso);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.38), skin);
-    head.position.y = 1.62;
-    g.add(head);
-    const gun = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.12, 0.6), new THREE.MeshLambertMaterial({ color: 0x111111 }));
-    gun.position.set(0.3, 1.1, 0.3);
-    g.add(gun);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.1, 0.4), new THREE.MeshLambertMaterial({ color: 0x7f1d1d }));
+    body.position.y = 1.1;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.45), new THREE.MeshLambertMaterial({ color: 0xc9a06a }));
+    head.position.y = 1.85;
+    g.add(body, head);
     g.position.set(x, 0, z);
-    this.scene.add(g);
-    const enemy = { group: g, pos: g.position, hp, shootTimer: 1 + Math.random() * 2, heading: 0 };
-    this.enemies.push(enemy);
-    return enemy;
+    scene.add(g);
+    const e = { mesh: g, pos: g.position, health: 60, shootTimer: 1 + Math.random() * 2, alive: true };
+    enemies.push(e);
+    return e;
   }
 
-  spawnPickup(x, z, kind) {
-    const color = kind === 'health' ? 0x2ecc71 : 0xf1c40f;
-    const mesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.7, 0.7, 0.7),
-      new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.35 })
-    );
-    mesh.position.set(x, 0.6, z);
-    mesh.rotation.y = Math.PI / 4;
-    this.scene.add(mesh);
-    this.pickups.push({ mesh, pos: mesh.position, kind, bob: Math.random() * Math.PI * 2 });
+  function spawnPickup(kind, x, z) {
+    const color = kind === 'health' ? 0x22c55e : 0xf59e0b;
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshBasicMaterial({ color }));
+    m.position.set(x, 0.8, z);
+    scene.add(m);
+    pickups.push({ mesh: m, pos: m.position, kind });
   }
 
-  _addTracer(from, to) {
+  function addTracer(from, to) {
     const geo = new THREE.BufferGeometry().setFromPoints([from.clone(), to.clone()]);
-    const line = new THREE.Line(geo, this._tracerMat);
-    this.scene.add(line);
-    this.tracers.push({ line, life: 0.12 });
+    const line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffe066, transparent: true, opacity: 0.9 }));
+    scene.add(line);
+    tracers.push({ line, life: 0.08 });
   }
 
-  fire(origin, dir, player) {
-    if (this.cooldown > 0 || this.reloading > 0) return false;
-    const w = this.weapon;
-    if (this.weaponId === 'fists') {
-      this.cooldown = w.interval;
-      this.audio.punch();
-      // Melee: hit the nearest enemy in front within range.
-      for (const e of this.enemies) {
-        const d = e.pos.distanceTo(origin);
-        if (d < w.range + 1) {
-          e.hp -= w.damage;
-          e.pos.addScaledVector(dir, 0.8); // knockback
-        }
-      }
-      return true;
-    }
-    if (this.mag[this.weaponId] <= 0) {
-      this.reload();
+  function fire(from, dir, spread) {
+    const w = WEAPONS[current];
+    if (cooldown > 0 || reloading > 0) return false;
+    if (current !== 'fists' && mag[current] <= 0) {
+      reloading = 1.2;
       return false;
     }
-    this.cooldown = w.interval;
-    this.mag[this.weaponId]--;
-    this.audio.shot(this.weaponId);
+    cooldown = 1 / w.rate;
+    if (current !== 'fists') mag[current]--;
+    audio.shot();
     const pellets = w.pellets || 1;
-    let hitSomething = false;
     for (let p = 0; p < pellets; p++) {
-      const spread = (Math.random() - 0.5) * 2 * w.spread;
       const d = dir.clone();
-      const right = new THREE.Vector3(Math.cos(Math.atan2(dir.x, dir.z)), 0, -Math.sin(Math.atan2(dir.x, dir.z)));
-      d.addScaledVector(right, spread).normalize();
-      const end = origin.clone().addScaledVector(d, w.range);
-      // Hit the first enemy along the ray (simple distance-to-ray test).
-      let best = null;
-      let bestT = w.range;
-      for (const e of this.enemies) {
-        const toE = e.pos.clone().sub(origin);
-        const t = toE.dot(d);
-        if (t < 0 || t > w.range) continue;
-        const perp = toE.clone().addScaledVector(d, -t).length();
-        if (perp < 1.1 && t < bestT) { best = e; bestT = t; }
+      if (spread) {
+        d.x += (Math.random() - 0.5) * spread * 2;
+        d.y += (Math.random() - 0.5) * spread * 2;
+        d.normalize();
       }
-      if (best) {
-        best.hp -= w.damage;
-        best.pos.addScaledVector(d, 0.5); // knockback
-        end.copy(origin).addScaledVector(d, bestT);
-        hitSomething = true;
-      }
-      this._addTracer(origin, end);
-    }
-    return hitSomething;
-  }
-
-  reload() {
-    const id = this.weaponId;
-    if (id === 'fists' || this.reloading > 0) return;
-    const w = WEAPONS[id];
-    const need = w.mag - this.mag[id];
-    if (need <= 0 || this.ammo[id] <= 0) return;
-    this.reloading = w.reload;
-  }
-
-  update(dt, player, playerPos, playerHeading) {
-    if (this.cooldown > 0) this.cooldown -= dt;
-    if (this.reloading > 0) {
-      this.reloading -= dt;
-      if (this.reloading <= 0) {
-        const id = this.weaponId;
-        const w = WEAPONS[id];
-        const need = w.mag - this.mag[id];
-        const take = Math.min(need, this.ammo[id]);
-        this.mag[id] += take;
-        this.ammo[id] -= take;
-      }
-    }
-    // Tracers fade fast.
-    for (let i = this.tracers.length - 1; i >= 0; i--) {
-      const t = this.tracers[i];
-      t.life -= dt;
-      if (t.life <= 0) {
-        this.scene.remove(t.line);
-        t.line.geometry.dispose();
-        this.tracers.splice(i, 1);
-      }
-    }
-    // Enemies: face the player, strafe a little, shoot back.
-    for (let i = this.enemies.length - 1; i >= 0; i--) {
-      const e = this.enemies[i];
-      if (e.hp <= 0) {
-        this.scene.remove(e.group);
-        this.enemies.splice(i, 1);
-        // Drop ammo on death.
-        this.spawnPickup(e.pos.x, e.pos.z, 'ammo');
-        continue;
-      }
-      const toPlayer = playerPos.clone().sub(e.pos);
-      const dist = toPlayer.length();
-      e.heading = Math.atan2(toPlayer.x, toPlayer.z);
-      e.group.rotation.y = e.heading;
-      if (dist > 14) {
-        e.pos.addScaledVector(toPlayer.normalize(), 3.2 * dt);
-      }
-      e.shootTimer -= dt;
-      if (e.shootTimer <= 0 && dist < 55) {
-        e.shootTimer = 1.4 + Math.random() * 1.2;
-        this._addTracer(e.pos.clone().setY(1.2), playerPos.clone().setY(1.1));
-        this.audio.shot('pistol');
-        if (Math.random() < 0.45) player.takeDamage(7);
-      }
-    }
-    // Pickups: bob, spin, collect on touch.
-    for (let i = this.pickups.length - 1; i >= 0; i--) {
-      const p = this.pickups[i];
-      p.bob += dt * 3;
-      p.mesh.position.y = 0.6 + Math.sin(p.bob) * 0.15;
-      p.mesh.rotation.y += dt * 2;
-      const d = Math.hypot(p.pos.x - playerPos.x, p.pos.z - playerPos.z);
-      if (d < 1.8) {
-        if (p.kind === 'health') player.heal(35);
-        else {
-          for (const id of ['pistol', 'smg', 'shotgun', 'rifle']) this.ammo[id] += 12;
+      raycaster.set(from, d);
+      raycaster.far = w.range;
+      const targets = enemies.filter((e) => e.alive).map((e) => e.mesh.children[0]);
+      const hits = raycaster.intersectObjects(targets, false);
+      const end = hits.length > 0 ? hits[0].point : from.clone().addScaledVector(d, w.range);
+      addTracer(from, end);
+      if (hits.length > 0) {
+        const e = enemies.find((en) => en.mesh.children[0] === hits[0].object);
+        if (e) {
+          e.health -= w.damage;
+          // Hit knockback.
+          e.pos.addScaledVector(d, 0.4);
+          if (e.health <= 0) {
+            e.alive = false;
+            scene.remove(e.mesh);
+            if (Math.random() < 0.5) spawnPickup('ammo', e.pos.x, e.pos.z);
+            onKill(e);
+          }
         }
-        this.audio.pickup();
-        this.scene.remove(p.mesh);
-        this.pickups.splice(i, 1);
       }
     }
+    return true;
   }
+
+  return {
+    get current() { return current; },
+    get ammo() { return { ...ammo, mag: { ...mag } }; },
+    setWeapon(name) { if (WEAPONS[name]) { current = name; cooldown = 0; } },
+    spawnEnemy, spawnPickup, fire,
+    update(dt, playerPos, playerDir) {
+      cooldown = Math.max(0, cooldown - dt);
+      if (reloading > 0) {
+        reloading -= dt;
+        if (reloading <= 0 && current !== 'fists') {
+          const need = WEAPONS[current].mag - mag[current];
+          const take = Math.min(need, ammo[current]);
+          mag[current] += take;
+          ammo[current] -= take;
+        }
+      }
+      for (const t of tracers) {
+        t.life -= dt;
+        t.line.material.opacity = Math.max(0, t.life / 0.08);
+        if (t.life <= 0) scene.remove(t.line);
+      }
+      for (let i = tracers.length - 1; i >= 0; i--) if (tracers[i].life <= 0) tracers.splice(i, 1);
+      // Enemy AI: face the player and shoot with inaccuracy.
+      for (const e of enemies) {
+        if (!e.alive) continue;
+        const dx = playerPos.x - e.pos.x, dz = playerPos.z - e.pos.z;
+        const d = Math.hypot(dx, dz);
+        e.mesh.rotation.y = Math.atan2(dx, dz);
+        if (d < 40) {
+          e.shootTimer -= dt;
+          if (e.shootTimer <= 0) {
+            e.shootTimer = 1.5 + Math.random() * 1.5;
+            const from = e.pos.clone(); from.y = 1.4;
+            const dir = new THREE.Vector3(dx / d, 0, dz / d);
+            dir.x += (Math.random() - 0.5) * 0.2;
+            dir.z += (Math.random() - 0.5) * 0.2;
+            dir.normalize();
+            raycaster.set(from, dir);
+            raycaster.far = 40;
+            addTracer(from, from.clone().addScaledVector(dir, 30));
+            audio.shot();
+          }
+        }
+        if (d > 12) {
+          e.pos.x += (dx / d) * 3 * dt;
+          e.pos.z += (dz / d) * 3 * dt;
+        }
+      }
+      // Pickups bob and get collected.
+      for (let i = pickups.length - 1; i >= 0; i--) {
+        const p = pickups[i];
+        p.mesh.rotation.y += dt * 3;
+        p.mesh.position.y = 0.8 + Math.sin(performance.now() * 0.004 + i) * 0.15;
+        if (Math.hypot(p.pos.x - playerPos.x, p.pos.z - playerPos.z) < 2) {
+          scene.remove(p.mesh);
+          pickups.splice(i, 1);
+          audio.pickup();
+          if (p.kind === 'ammo') ammo[current] += 12;
+          // Health handled by caller via return value.
+          if (p.kind === 'health') this._healthPickup = true;
+        }
+      }
+    },
+    takeHealthPickup() {
+      const v = !!this._healthPickup;
+      this._healthPickup = false;
+      return v;
+    },
+    reload() {
+      if (current !== 'fists' && reloading <= 0 && mag[current] < WEAPONS[current].mag && ammo[current] > 0) reloading = 1.2;
+    },
+    enemyCount() { return enemies.filter((e) => e.alive).length; },
+  };
 }

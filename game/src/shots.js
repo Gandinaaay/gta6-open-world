@@ -1,58 +1,70 @@
-// Vice Bay — screenshot staging: the 4 deterministic scenes the dossier
-// shows (?shot=start|play|chase|night&seed=1). Each scene sets the time,
-// weather, player position and wanted level, then raises
-// window.__shotReady so the capture driver knows the frame is ready.
-// Cars are spawned road-aligned so the shots look composed, not random.
+// The 4 staged screenshot scenes (?shot=start|play|chase|night&seed=1).
+// Each arranges the world deterministically, then main.js renders frames
+// and sets window.__shotReady when the scene is settled.
 
-export function stageShot(mode, ctx) {
-  switch (mode) {
-    case 'start': {
-      // Dawn title over the city: morning light, clear sky, player on the
-      // Downtown road with the towers rising behind them to the north.
-      // (Camera sits south of the player, so heading 0 faces it.)
-      ctx.setTime(0.27);
-      ctx.setWeather('clear');
-      ctx.placePlayer(0, 40, 0);
-      ctx.setWanted(0);
-      break;
-    }
-    case 'play': {
-      // Midday driving Downtown: red Comet GT on the road, objective ahead.
-      ctx.setTime(0.45);
-      ctx.setWeather('clear');
-      ctx.placePlayer(0, 40, 0);
-      ctx.putCar('sport', 0, 44, 0);
-      ctx.enterCar();
-      ctx.setWanted(0);
-      break;
-    }
-    case 'chase': {
-      // Night pursuit: 3 wanted stars, two police interceptors closing in.
-      ctx.setTime(0.82);
-      ctx.setWeather('clear');
-      ctx.placePlayer(160, 160, Math.PI / 2);
-      ctx.putCar('sedan', 160, 164, Math.PI / 2);
-      ctx.enterCar();
-      ctx.setWanted(3);
-      ctx.spawnPolice(2);
-      break;
-    }
-    case 'night': {
-      // Beach race in the rain at night: wet road, headlights, rain streaks.
-      ctx.setTime(0.96);
-      ctx.setWeather('rain');
-      ctx.placePlayer(-480, 480, Math.PI / 2);
-      ctx.putCar('sport', -480, 484, Math.PI / 2);
-      ctx.enterCar();
-      ctx.putCar('sport', -480, 470, Math.PI / 2);
-      ctx.setWanted(0);
-      break;
-    }
-    default:
-      return false;
+export function stageShot(ctx, name) {
+  const { world, player, vehicles, police, hud, traffic } = ctx;
+  // Clear any leftover police.
+  police.clear();
+  hud.showTitle(false);
+  hud.showPause(false);
+  hud.showMenu(false);
+
+  if (name === 'start') {
+    world.setTimeOfDay(0.06); // dawn
+    world.setWeather('clear');
+    player.reset(0, 40);
+    const car = vehicles.spawn('comet', 6, 30, Math.PI);
+    car.driver = null;
+    ctx.camera.position.set(-30, 26, -60);
+    ctx.camera.lookAt(0, 10, 60);
+    ctx.shotCamera = { x: -30, y: 26, z: -60, look: [0, 10, 60] };
+    hud.showTitle(true);
+    return 'start';
   }
-  ctx.setShotReady();
-  return true;
-}
 
-export const SHOT_MODES = ['start', 'play', 'chase', 'night'];
+  if (name === 'play') {
+    world.setTimeOfDay(0.3); // morning
+    world.setWeather('clear');
+    const car = vehicles.spawn('comet', 0, 0, 0);
+    car.driver = 'player';
+    player.enterCar(car);
+    car.speed = 22;
+    // A little traffic around downtown.
+    vehicles.spawn('sedan', -12, 120, 0).driver = 'traffic';
+    vehicles.spawn('taxi', 12, -80, Math.PI).driver = 'traffic';
+    ctx.shotDrive = { speed: 22, steer: 0 };
+    return 'play';
+  }
+
+  if (name === 'chase') {
+    world.setTimeOfDay(0.62); // night
+    world.setWeather('clear');
+    const car = vehicles.spawn('comet', 0, 0, 0);
+    car.driver = 'player';
+    player.enterCar(car);
+    car.speed = 30;
+    police.addHeat(3);
+    // Bring the pursuit cars into the frame ahead of the player (the chase
+    // camera looks forward, so cops behind the player are never visible).
+    const cops = vehicles.list.filter((c) => c.driver === 'police');
+    cops.forEach((c, i) => {
+      c.pos.set(-10 - i * 4, 0, 60 + i * 50);
+      c.heading = 0;
+      c.speed = 30;
+    });
+    ctx.shotDrive = { speed: 30, steer: 0 };
+    return 'chase';
+  }
+
+  // night: beach race in the rain — on the road, not the grass.
+  world.setTimeOfDay(0.8);
+  world.setWeather('rain');
+  const car = vehicles.spawn('comet', -800, 600, 0);
+  car.driver = 'player';
+  player.enterCar(car);
+  car.speed = 26;
+  vehicles.spawn('sedan', -800, 720, 0).driver = 'traffic';
+  ctx.shotDrive = { speed: 26, steer: 0 };
+  return 'night';
+}

@@ -1,133 +1,104 @@
-// Vice Bay — every texture is painted on a canvas at boot. No image files.
-// Roads get dashes and crosswalks, buildings get lit windows, neon signs get
-// glowing lettering, and the beach gets sand.
+// Canvas-painted textures: every surface is generated at boot, no image files.
 
-function makeCanvas(w, h, draw) {
+function canvas(w, h) {
   const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  draw(c.getContext('2d'), w, h);
-  const tex = new THREE.CanvasTexture(c);
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.RepeatWrapping;
-  tex.anisotropy = 4;
-  return tex;
+  c.width = w; c.height = h;
+  return c;
 }
 
-export function roadTexture() {
-  return makeCanvas(128, 128, (g) => {
-    g.fillStyle = '#2b2d33';
-    g.fillRect(0, 0, 128, 128);
-    g.fillStyle = '#33363d';
-    g.fillRect(0, 0, 128, 6);
-    g.fillRect(0, 122, 128, 6);
-    // Centre dashes (horizontal street in the tile).
-    g.fillStyle = '#d8c24a';
-    for (let x = 0; x < 128; x += 32) g.fillRect(x + 4, 61, 20, 5);
-    // Crosswalk stripes at the tile edges.
-    g.fillStyle = 'rgba(235,235,235,0.85)';
-    for (let y = 8; y < 120; y += 16) {
-      g.fillRect(2, y, 10, 8);
-      g.fillRect(116, y, 10, 8);
+function tex(c) {
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = THREE.RepeatWrapping;
+  t.wrapT = THREE.RepeatWrapping;
+  t.anisotropy = 4;
+  return t;
+}
+
+export function makeTextures(rng) {
+  // Asphalt road with dashes and edge lines.
+  const road = canvas(256, 256);
+  {
+    const g = road.getContext('2d');
+    g.fillStyle = '#23262b'; g.fillRect(0, 0, 256, 256);
+    for (let i = 0; i < 900; i++) {
+      g.fillStyle = `rgba(255,255,255,${rng.next() * 0.05})`;
+      g.fillRect(rng.next() * 256, rng.next() * 256, 2, 2);
     }
-  });
-}
-
-export function sidewalkTexture() {
-  return makeCanvas(64, 64, (g) => {
-    g.fillStyle = '#7d7f85';
-    g.fillRect(0, 0, 64, 64);
-    g.strokeStyle = '#6a6c72';
-    g.lineWidth = 2;
-    g.strokeRect(1, 1, 62, 62);
-    g.beginPath();
-    g.moveTo(32, 0); g.lineTo(32, 64);
-    g.moveTo(0, 32); g.lineTo(64, 32);
-    g.stroke();
-  });
-}
-
-export function groundTexture(beach) {
-  return makeCanvas(256, 256, (g) => {
-    if (beach) {
-      g.fillStyle = '#e3c998';
-      g.fillRect(0, 0, 256, 256);
-      g.fillStyle = '#d9bd8a';
-      for (let i = 0; i < 300; i++) g.fillRect(Math.random() * 256, Math.random() * 256, 2, 2);
-    } else {
-      g.fillStyle = '#4a5240';
-      g.fillRect(0, 0, 256, 256);
-      g.fillStyle = '#424a38';
-      for (let i = 0; i < 220; i++) g.fillRect(Math.random() * 256, Math.random() * 256, 3, 3);
-    }
-  });
-}
-
-export function buildingTexture(base, litRatio, rng) {
-  const w = 128, h = 256;
-  return makeCanvas(w, h, (g) => {
-    g.fillStyle = base;
-    g.fillRect(0, 0, w, h);
-    // Subtle vertical shading so facades are not flat.
-    const grad = g.createLinearGradient(0, 0, w, 0);
-    grad.addColorStop(0, 'rgba(0,0,0,0.25)');
-    grad.addColorStop(0.5, 'rgba(255,255,255,0.06)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.25)');
-    g.fillStyle = grad;
-    g.fillRect(0, 0, w, h);
-    // Window grid, some lit warm yellow.
-    for (let y = 14; y < h - 10; y += 22) {
-      for (let x = 12; x < w - 12; x += 22) {
-        const lit = rng.next() < litRatio;
-        g.fillStyle = lit ? '#ffd98a' : '#1d2733';
-        g.fillRect(x, y, 13, 14);
+    g.fillStyle = '#f5c542'; g.fillRect(126, 0, 4, 256);
+    g.fillStyle = '#e5e7eb'; g.fillRect(8, 0, 3, 256); g.fillRect(245, 0, 3, 256);
+    g.fillStyle = '#f5c542';
+    for (let y = 0; y < 256; y += 64) g.fillRect(126, y, 4, 32);
+  }
+  // Building facade with lit windows.
+  const facade = (base, lit) => {
+    const c = canvas(128, 256);
+    const g = c.getContext('2d');
+    g.fillStyle = base; g.fillRect(0, 0, 128, 256);
+    for (let y = 12; y < 244; y += 24) {
+      for (let x = 10; x < 118; x += 22) {
+        g.fillStyle = rng.next() < lit ? '#ffd97a' : '#1f2937';
+        g.fillRect(x, y, 14, 14);
       }
     }
-  });
-}
-
-export function neonTexture(text, color) {
-  return makeCanvas(512, 128, (g) => {
-    g.fillStyle = '#0a0a12';
-    g.fillRect(0, 0, 512, 128);
-    g.font = 'bold 64px Arial, sans-serif';
-    g.textAlign = 'center';
-    g.textBaseline = 'middle';
-    g.shadowColor = color;
-    g.shadowBlur = 26;
+    return tex(c);
+  };
+  // Neon sign with text.
+  const neon = (text, color) => {
+    const c = canvas(512, 128);
+    const g = c.getContext('2d');
+    g.fillStyle = '#0b0b12'; g.fillRect(0, 0, 512, 128);
+    g.font = 'bold 64px Arial';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.shadowColor = color; g.shadowBlur = 28;
     g.fillStyle = color;
-    g.fillText(text, 256, 66);
-    g.shadowBlur = 8;
+    g.fillText(text, 256, 64);
+    g.shadowBlur = 0;
     g.fillStyle = '#ffffff';
-    g.fillText(text, 256, 66);
-  });
-}
-
-export function billboardTexture(text, sub) {
-  return makeCanvas(512, 256, (g) => {
-    g.fillStyle = '#123a5c';
-    g.fillRect(0, 0, 512, 256);
-    g.fillStyle = '#e8a34c';
-    g.fillRect(0, 0, 512, 18);
-    g.fillRect(0, 238, 512, 18);
-    g.font = 'bold 56px Arial, sans-serif';
-    g.textAlign = 'center';
-    g.fillStyle = '#f5f0e6';
-    g.fillText(text, 256, 110);
-    g.font = '28px Arial, sans-serif';
-    g.fillStyle = '#ffd98a';
-    g.fillText(sub, 256, 170);
-  });
-}
-
-export function runwayTexture() {
-  return makeCanvas(256, 64, (g) => {
-    g.fillStyle = '#23262b';
-    g.fillRect(0, 0, 256, 64);
-    g.fillStyle = '#e8e8e8';
-    for (let x = 0; x < 256; x += 32) g.fillRect(x + 6, 29, 18, 6);
-    g.fillStyle = '#d8c24a';
-    g.fillRect(0, 4, 256, 3);
-    g.fillRect(0, 57, 256, 3);
-  });
+    g.fillText(text, 256, 64);
+    return tex(c);
+  };
+  // Sidewalk / plaza tiles.
+  const sidewalk = canvas(128, 128);
+  {
+    const g = sidewalk.getContext('2d');
+    g.fillStyle = '#6b7280'; g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = '#4b5563'; g.lineWidth = 2;
+    for (let i = 0; i <= 128; i += 32) {
+      g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 128); g.stroke();
+      g.beginPath(); g.moveTo(0, i); g.lineTo(128, i); g.stroke();
+    }
+  }
+  // Grass for parks and beach sand.
+  const grass = canvas(128, 128);
+  {
+    const g = grass.getContext('2d');
+    g.fillStyle = '#2d5a2d'; g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 500; i++) {
+      g.fillStyle = rng.chance(0.5) ? '#356b35' : '#244d24';
+      g.fillRect(rng.next() * 128, rng.next() * 128, 3, 3);
+    }
+  }
+  const sand = canvas(128, 128);
+  {
+    const g = sand.getContext('2d');
+    g.fillStyle = '#d9c08a'; g.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 400; i++) {
+      g.fillStyle = rng.chance(0.5) ? '#c9ae72' : '#e8d3a0';
+      g.fillRect(rng.next() * 128, rng.next() * 128, 2, 2);
+    }
+  }
+  return {
+    road: tex(road),
+    sidewalk: tex(sidewalk),
+    grass: tex(grass),
+    sand: tex(sand),
+    facadeDowntown: facade('#374151', 0.55),
+    facadeHavana: facade('#b45309', 0.45),
+    facadePort: facade('#4b5563', 0.25),
+    facadeHills: facade('#78350f', 0.7),
+    neonTide: neon('NEON TIDE', '#22d3ee'),
+    neonHavana: neon('HAVANA MARKET', '#f97316'),
+    neonVice: neon('VICE BAY', '#ec4899'),
+    neonPier: neon('PIER 21', '#a78bfa'),
+  };
 }
