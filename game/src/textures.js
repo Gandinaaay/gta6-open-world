@@ -1,103 +1,89 @@
-// Canvas-painted textures: every surface is generated at boot, no image files.
+// Canvas-painted textures: roads, pavements, lawns, sand and building facades.
+// THREE arrives as a global from the classic <script> tag (game/vendor/three.min.js).
+const THREE = window.THREE;
 
-function canvas(w, h) {
+function canvasTex(w, h, draw, rx = 1, ry = 1) {
   const c = document.createElement('canvas');
   c.width = w; c.height = h;
-  return c;
-}
-
-function tex(c) {
+  draw(c.getContext('2d'), w, h);
   const t = new THREE.CanvasTexture(c);
   t.wrapS = THREE.RepeatWrapping;
   t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 4;
+  t.repeat.set(rx, ry);
+  t.colorSpace = THREE.SRGBColorSpace;
   return t;
 }
 
 export function makeTextures(rng) {
-  // Asphalt road with dashes and edge lines.
-  const road = canvas(256, 256);
-  {
-    const g = road.getContext('2d');
-    g.fillStyle = '#23262b'; g.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 900; i++) {
-      g.fillStyle = `rgba(255,255,255,${rng.next() * 0.05})`;
-      g.fillRect(rng.next() * 256, rng.next() * 256, 2, 2);
+  const road = canvasTex(256, 256, (g, w, h) => {
+    g.fillStyle = '#26292e'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#2d3036';
+    for (let i = 0; i < 900; i++) g.fillRect(rng.range(0, w), rng.range(0, h), 2, 2);
+    g.fillStyle = '#c8b23a';
+    g.fillRect(w / 2 - 3, 0, 6, h);
+    g.fillStyle = '#d8d8d8';
+    for (let y = 0; y < h; y += 64) { g.fillRect(28, y + 8, 5, 32); g.fillRect(w - 33, y + 8, 5, 32); }
+  });
+  const pavement = canvasTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#8d8a80'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#76736a'; g.lineWidth = 2;
+    for (let i = 0; i <= 4; i++) {
+      g.beginPath(); g.moveTo(i * 32, 0); g.lineTo(i * 32, h); g.stroke();
+      g.beginPath(); g.moveTo(0, i * 32); g.lineTo(w, i * 32); g.stroke();
     }
-    g.fillStyle = '#e5e7eb'; g.fillRect(8, 0, 3, 256); g.fillRect(245, 0, 3, 256);
-    g.fillStyle = '#f5c542';
-    for (let y = 0; y < 256; y += 64) g.fillRect(126, y, 4, 32);
-  }
-  // Building facade with lit windows.
-  const facade = (base, lit) => {
-    const c = canvas(128, 256);
-    const g = c.getContext('2d');
-    g.fillStyle = base; g.fillRect(0, 0, 128, 256);
-    for (let y = 12; y < 244; y += 24) {
-      for (let x = 10; x < 118; x += 22) {
-        g.fillStyle = rng.next() < lit ? '#ffd97a' : '#1f2937';
-        g.fillRect(x, y, 14, 14);
-      }
+    g.fillStyle = '#7c796f';
+    for (let i = 0; i < 40; i++) g.fillRect(rng.range(0, w), rng.range(0, h), 3, 3);
+  });
+  const grass = canvasTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#4a7a35'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 700; i++) {
+      g.fillStyle = rng.pick(['#3d6a2c', '#557f3d', '#466f33']);
+      g.fillRect(rng.range(0, w), rng.range(0, h), 3, 5);
     }
-    return tex(c);
+  });
+  const sand = canvasTex(128, 128, (g, w, h) => {
+    g.fillStyle = '#cbb27f'; g.fillRect(0, 0, w, h);
+    for (let i = 0; i < 500; i++) {
+      g.fillStyle = rng.pick(['#bfa36e', '#d8c08d', '#c4a878']);
+      g.fillRect(rng.range(0, w), rng.range(0, h), 2, 2);
+    }
+  });
+  const facades = {};
+  const facadeDefs = {
+    downtown: ['#33455c', '#3d4f63', '#2c3e52'],
+    havana: ['#a8623c', '#b5744a', '#96603a'],
+    port: ['#4d5257', '#565b60', '#45494e'],
+    hills: ['#5a6b52', '#66765e', '#4f5f49'],
   };
-  // Neon sign with text.
-  const neon = (text, color) => {
-    const c = canvas(512, 128);
-    const g = c.getContext('2d');
-    g.fillStyle = '#0b0b12'; g.fillRect(0, 0, 512, 128);
-    g.font = 'bold 64px Arial';
+  for (const [key, cols] of Object.entries(facadeDefs)) {
+    facades[key] = cols.map((base) => canvasTex(128, 256, (g, w, h) => {
+      g.fillStyle = base; g.fillRect(0, 0, w, h);
+      g.fillStyle = 'rgba(0,0,0,0.18)';
+      for (let y = 0; y < h; y += 32) g.fillRect(0, y, w, 3);
+      for (let y = 16; y < h; y += 32) {
+        for (let x = 10; x < w; x += 28) {
+          g.fillStyle = rng.chance(0.45) ? '#ffd98a' : '#20262e';
+          g.fillRect(x, y, 16, 18);
+        }
+      }
+    }));
+  }
+  const neon = (text, color) => canvasTex(512, 128, (g, w, h) => {
+    g.fillStyle = '#0d0d14'; g.fillRect(0, 0, w, h);
+    g.font = 'bold 64px sans-serif';
     g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.shadowColor = color; g.shadowBlur = 28;
+    g.shadowColor = color; g.shadowBlur = 26;
     g.fillStyle = color;
-    g.fillText(text, 256, 64);
+    g.fillText(text, w / 2, h / 2);
     g.shadowBlur = 0;
     g.fillStyle = '#ffffff';
-    g.fillText(text, 256, 64);
-    return tex(c);
-  };
-  // Sidewalk tiles.
-  const sidewalk = canvas(128, 128);
-  {
-    const g = sidewalk.getContext('2d');
-    g.fillStyle = '#6b7280'; g.fillRect(0, 0, 128, 128);
-    g.strokeStyle = '#4b5563'; g.lineWidth = 2;
-    for (let i = 0; i <= 128; i += 32) {
-      g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 128); g.stroke();
-      g.beginPath(); g.moveTo(0, i); g.lineTo(128, i); g.stroke();
-    }
-  }
-  // Grass for parks and beach sand.
-  const grass = canvas(128, 128);
-  {
-    const g = grass.getContext('2d');
-    g.fillStyle = '#2d5a2d'; g.fillRect(0, 0, 128, 128);
-    for (let i = 0; i < 500; i++) {
-      g.fillStyle = rng.chance(0.5) ? '#356b35' : '#244d24';
-      g.fillRect(rng.next() * 128, rng.next() * 128, 3, 3);
-    }
-  }
-  const sand = canvas(128, 128);
-  {
-    const g = sand.getContext('2d');
-    g.fillStyle = '#d9c08a'; g.fillRect(0, 0, 128, 128);
-    for (let i = 0; i < 400; i++) {
-      g.fillStyle = rng.chance(0.5) ? '#c9ae72' : '#e8d3a0';
-      g.fillRect(rng.next() * 128, rng.next() * 128, 2, 2);
-    }
-  }
+    g.fillText(text, w / 2, h / 2);
+  });
   return {
-    road: tex(road),
-    sidewalk: tex(sidewalk),
-    grass: tex(grass),
-    sand: tex(sand),
-    facadeDowntown: facade('#374151', 0.55),
-    facadeHavana: facade('#b45309', 0.45),
-    facadePort: facade('#4b5563', 0.25),
-    facadeHills: facade('#78350f', 0.7),
-    neonTide: neon('NEON TIDE', '#22d3ee'),
-    neonHavana: neon('HAVANA MARKET', '#f97316'),
-    neonVice: neon('VICE BAY', '#ec4899'),
-    neonPier: neon('PIER 21', '#a78bfa'),
+    road, pavement, grass, sand, facades,
+    neonVice: neon('VICE BAY', '#ff3df0'),
+    neonHavana: neon('HAVANA CLUB', '#ffb02e'),
+    neonPier: neon('PIER 21', '#3dd8ff'),
+    neonTide: neon('NEON TIDE', '#39ff88'),
   };
 }

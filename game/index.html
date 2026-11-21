@@ -5,72 +5,67 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Vice Bay: Blood &amp; Destiny</title>
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0b1026; font-family: Arial, Helvetica, sans-serif; }
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0c1226; font-family: 'Segoe UI', Arial, sans-serif; }
   #game { display: block; width: 100%; height: 100%; }
-  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; }
-  .panel { position: absolute; background: rgba(0,0,0,0.55); border-radius: 8px; padding: 8px 12px; }
-  #top-left { top: 12px; left: 12px; }
-  #healthbar { width: 180px; height: 14px; background: #1f2937; border-radius: 7px; overflow: hidden; margin-bottom: 6px; }
-  #health { height: 100%; width: 100%; background: #22c55e; }
-  #money { font-size: 20px; font-weight: bold; color: #4ade80; }
-  #rep { font-size: 13px; color: #d1d5db; }
-  #top-right { top: 12px; right: 12px; text-align: right; }
-  #stars { font-size: 26px; letter-spacing: 2px; color: #9ca3af; }
-  #speed { font-size: 22px; font-weight: bold; }
-  #top-center { top: 12px; left: 50%; transform: translateX(-50%); text-align: center; }
-  #compass { font-size: 18px; font-weight: bold; }
-  #objective { font-size: 13px; color: #fde68a; margin-top: 4px; max-width: 420px; }
-  #flash { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); font-size: 26px; font-weight: bold; color: #facc15; text-shadow: 0 2px 8px #000; opacity: 0; transition: opacity 0.3s; text-align: center; }
-  #minimap { position: absolute; left: 12px; bottom: 12px; width: 180px; height: 180px; border: 2px solid rgba(255,255,255,0.35); border-radius: 8px; background: rgba(10,15,25,0.85); }
-  #help { position: absolute; right: 12px; bottom: 12px; font-size: 12px; color: #d1d5db; text-align: right; }
-  .overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; flex-direction: column; background: rgba(5,8,20,0.55); color: #fff; pointer-events: auto; z-index: 10; }
-  .overlay h1 { font-size: 52px; margin: 0 0 8px; color: #f472b6; text-shadow: 0 0 24px #ec4899, 0 4px 0 #000; letter-spacing: 2px; }
-  .overlay p { margin: 4px 0 20px; color: #e5e7eb; }
-  .overlay button { font-size: 18px; padding: 12px 28px; margin: 6px; border: none; border-radius: 8px; background: #ec4899; color: #fff; cursor: pointer; }
-  .overlay button:hover { background: #db2777; }
-  #menu-list { max-width: 640px; max-height: 60vh; overflow: auto; text-align: left; }
-  .menu-row { padding: 8px 12px; margin: 4px 0; background: rgba(255,255,255,0.08); border-radius: 6px; font-size: 14px; }
-  .menu-row.current { background: rgba(236,72,153,0.35); }
-  .menu-row.done { opacity: 0.55; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; display: none; }
+  #hud.on { display: block; }
+  .bar { position: absolute; top: 14px; left: 14px; width: 220px; height: 18px; background: rgba(0,0,0,0.55); border: 1px solid rgba(255,255,255,0.35); border-radius: 4px; overflow: hidden; }
+  #health { height: 100%; width: 100%; background: #37c24a; }
+  #money { position: absolute; top: 38px; left: 14px; font-size: 22px; font-weight: bold; text-shadow: 0 1px 3px #000; }
+  #rep { position: absolute; top: 64px; left: 14px; font-size: 14px; text-shadow: 0 1px 3px #000; }
+  #stars { position: absolute; top: 14px; right: 14px; font-size: 26px; letter-spacing: 4px; color: #888; text-shadow: 0 1px 3px #000; }
+  #stars.hot { color: #ffd020; }
+  #speed { position: absolute; bottom: 16px; right: 16px; font-size: 26px; font-weight: bold; text-shadow: 0 1px 3px #000; }
+  #compass { position: absolute; top: 14px; left: 50%; transform: translateX(-50%); font-size: 20px; font-weight: bold; background: rgba(0,0,0,0.45); padding: 4px 12px; border-radius: 4px; }
+  #objective { position: absolute; top: 52px; left: 50%; transform: translateX(-50%); font-size: 15px; background: rgba(0,0,0,0.45); padding: 4px 12px; border-radius: 4px; }
+  #flash { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); font-size: 24px; font-weight: bold; color: #ffd020; text-shadow: 0 2px 6px #000; opacity: 0; transition: opacity 0.3s; text-align: center; }
+  #minimap { position: absolute; bottom: 16px; left: 16px; width: 180px; height: 180px; border: 2px solid rgba(255,255,255,0.4); border-radius: 6px; background: rgba(10,16,24,0.85); }
+  .overlay { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; flex-direction: column; background: rgba(5,8,18,0.72); color: #fff; z-index: 10; }
+  .overlay h1 { font-size: 52px; margin: 0 0 6px; color: #ff3df0; text-shadow: 0 0 24px #ff3df0; letter-spacing: 2px; }
+  .overlay h2 { font-size: 18px; margin: 0 0 22px; font-weight: normal; color: #ffd020; }
+  .overlay button { pointer-events: auto; font-size: 18px; padding: 12px 34px; margin: 6px; background: #c02020; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+  .overlay button:hover { background: #e03030; }
+  .overlay button.ghost { background: #2a4a6b; }
+  #menu-list { width: 520px; max-height: 60vh; overflow-y: auto; background: rgba(0,0,0,0.6); padding: 12px; border-radius: 8px; }
+  .menu-row { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.15); font-size: 15px; }
+  .menu-row.done { color: #7ad07a; }
+  #help { margin-top: 18px; font-size: 13px; color: #bbb; line-height: 1.7; text-align: center; }
 </style>
 </head>
 <body>
 <canvas id="game"></canvas>
 <div id="hud">
-  <div class="panel" id="top-left">
-    <div id="healthbar"><div id="health"></div></div>
-    <div id="money">$1,000</div>
-    <div id="rep">REP 0</div>
-  </div>
-  <div class="panel" id="top-right">
-    <div id="stars">☆☆☆☆☆</div>
-    <div id="speed">0 km/h</div>
-  </div>
-  <div class="panel" id="top-center">
-    <div id="compass">N</div>
-    <div id="objective">Welcome to Vice Bay</div>
-  </div>
+  <div class="bar"><div id="health"></div></div>
+  <div id="money">$1,000</div>
+  <div id="rep">REP 0</div>
+  <div id="stars">☆☆☆☆☆</div>
+  <div id="compass">N</div>
+  <div id="objective"></div>
   <div id="flash"></div>
+  <div id="speed">0 km/h</div>
   <canvas id="minimap" width="180" height="180"></canvas>
-  <div id="help">WASD move/drive · E enter car · Space handbrake<br>1-5 weapons · R reload · Click shoot · M missions · Esc pause</div>
 </div>
-<div class="overlay" id="title">
+<div id="title" class="overlay" style="display:flex">
   <h1>VICE BAY</h1>
-  <p style="font-size:22px;letter-spacing:4px;color:#facc15">BLOOD &amp; DESTINY</p>
-  <p>You are Rico. Steal cars, outrun the cops, run the city.</p>
+  <h2>Blood &amp; Destiny — starring Rico</h2>
   <button id="btn-new">NEW GAME</button>
-  <button id="btn-continue">CONTINUE</button>
-  <button id="btn-mute">🔊 Sound: On</button>
+  <button id="btn-continue" class="ghost">CONTINUE</button>
+  <button id="btn-mute" class="ghost">MUTE</button>
+  <div id="help">WASD move / drive &nbsp;·&nbsp; Shift run &nbsp;·&nbsp; Space jump / handbrake &nbsp;·&nbsp; E enter, exit &amp; steal cars<br>
+  Mouse drag camera &nbsp;·&nbsp; Click shoot &nbsp;·&nbsp; 1-5 weapons &nbsp;·&nbsp; R reload &nbsp;·&nbsp; M missions &nbsp;·&nbsp; Esc pause<br>
+  T taxi &nbsp;·&nbsp; G race &nbsp;·&nbsp; Y delivery &nbsp;·&nbsp; U escape &nbsp;·&nbsp; H packages &nbsp;·&nbsp; J territory &nbsp;·&nbsp; K time trial &nbsp;·&nbsp; L rescue</div>
 </div>
-<div class="overlay" id="menu" style="display:none">
+<div id="menu" class="overlay">
   <h1 style="font-size:32px">MISSIONS</h1>
   <div id="menu-list"></div>
-  <p>Press M or Esc to close</p>
+  <div id="help">M or Esc to close</div>
 </div>
-<div class="overlay" id="pause" style="display:none">
+<div id="pause" class="overlay">
   <h1 style="font-size:32px">PAUSED</h1>
-  <p>Press Esc to resume</p>
+  <div id="help">Esc to resume</div>
 </div>
+<div id="story-list" style="display:none"></div>
+<div id="side-list" style="display:none"></div>
 <script src="vendor/three.min.js"></script>
 <script type="module" src="src/main.js"></script>
 </body>

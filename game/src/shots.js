@@ -1,68 +1,72 @@
-// The 4 staged screenshot scenes (?shot=start|play|chase|night&seed=1).
-// Each arranges the world deterministically, then main.js renders frames
-// and sets window.__shotReady when the scene is settled.
-
+// The 4 staged screenshot scenes. Staging is deliberately different from every
+// earlier round: seed 7, late-morning beach on foot, afternoon SUV in Little
+// Havana, dusk 4-star chase in the Industrial Port, deep-night bike in the rain.
 export function stageShot(ctx, name) {
-  const { world, player, vehicles, police, hud } = ctx;
-  // Clear any leftover police.
-  police.clear();
-  hud.showTitle(false);
-  hud.showPause(false);
-  hud.showMenu(false);
+  const { world, player, vehicles, police, hud, traffic } = ctx;
+  ctx.state = 'shot';
 
   if (name === 'start') {
-    world.setTimeOfDay(0.06); // dawn
+    // Late morning on the Ocean Beach boardwalk, Rico on foot, taxi waiting.
+    world.setTimeOfDay(0.18);
     world.setWeather('clear');
-    player.reset(0, 40);
-    const car = vehicles.spawn('comet', 6, 30, Math.PI);
-    car.driver = null;
-    ctx.shotCamera = { x: -30, y: 26, z: -60, look: [0, 10, 60] };
+    player.reset(-850, 500);
+    player.update(0.001, { is: () => false, wasPressed: () => false }, ctx.city.colliders, 0);
+    const taxi = vehicles.spawn('taxi', -830, 520, Math.PI / 2);
+    taxi.driver = 'traffic';
+    vehicles.spawn('sedan', -800, 470, Math.PI);
+    ctx.shotCamera = { mode: 'fixed', pos: [-872, 9, 468], look: [-830, 2, 510] };
     hud.showTitle(true);
     return 'start';
   }
 
   if (name === 'play') {
-    world.setTimeOfDay(0.3); // morning
+    // Afternoon drive: Rico in an SUV down the x=-400 road in Little Havana.
+    world.setTimeOfDay(0.45);
     world.setWeather('clear');
-    const car = vehicles.spawn('comet', 0, 0, 0);
+    const car = vehicles.spawn('suv', -400, -560, Math.PI);
     car.driver = 'player';
     player.enterCar(car);
-    car.speed = 22;
-    // A little traffic around downtown.
-    vehicles.spawn('sedan', -12, 120, 0).driver = 'traffic';
-    vehicles.spawn('taxi', 12, -80, Math.PI).driver = 'traffic';
-    ctx.shotDrive = { speed: 22, steer: 0 };
+    car.speed = 24;
+    vehicles.spawn('taxi', -400, -680, Math.PI).driver = 'traffic';
+    vehicles.spawn('sedan', -400, -740, Math.PI).driver = 'traffic';
+    ctx.shotCamera = { mode: 'follow', car, off: [10, 4.5, 10] };
+    ctx.shotDrive = { speed: 24, steer: 0 };
     return 'play';
   }
 
   if (name === 'chase') {
-    world.setTimeOfDay(0.62); // dusk
+    // Dusk in the Industrial Port: 4-star wanted, interceptors closing in
+    // head-on down the z=-600 road.
+    world.setTimeOfDay(0.55);
     world.setWeather('clear');
-    const car = vehicles.spawn('comet', 0, 0, 0);
+    const car = vehicles.spawn('sedan', 600, -600, Math.PI / 2);
     car.driver = 'player';
     player.enterCar(car);
     car.speed = 30;
-    police.addHeat(3);
-    // Bring the pursuit cars into the frame AHEAD of the player: the chase
-    // camera looks forward, so cops behind the player are never visible.
+    police.addHeat(4);
     const cops = vehicles.list.filter((c) => c.driver === 'police');
     cops.forEach((c, i) => {
-      c.pos.set(-10 - i * 4, 0, 60 + i * 50);
-      c.heading = 0;
-      c.speed = 30;
+      // Close ahead: 45 shot frames are only 0.72 s of game time, so the
+      // interceptors must start near the player to be in the frame.
+      c.pos.set(680 + i * 50, 0, -600);
+      c.heading = Math.PI;
+      c.speed = 32;
     });
+    ctx.shotCamera = { mode: 'follow', car, off: [-14, 7, -6] };
     ctx.shotDrive = { speed: 30, steer: 0 };
     return 'chase';
   }
 
-  // night: beach race in the rain — on the road, not the grass.
-  world.setTimeOfDay(0.8);
+  // night: deep-night bike ride in the rain down the x=600 road, Rich Hills.
+  world.setTimeOfDay(0.85);
   world.setWeather('rain');
-  const car = vehicles.spawn('comet', -800, 600, 0);
+  const car = vehicles.spawn('bike', 600, 650, 0);
   car.driver = 'player';
   player.enterCar(car);
-  car.speed = 26;
-  vehicles.spawn('sedan', -800, 720, 0).driver = 'traffic';
-  ctx.shotDrive = { speed: 26, steer: 0 };
+  car.speed = 28;
+  vehicles.spawn('suv', 600, 800, 0).driver = 'traffic';
+  vehicles.spawn('taxi', 600, 860, Math.PI).driver = 'traffic';
+  ctx.shotCamera = { mode: 'follow', car, off: [8, 4, -12] };
+  ctx.shotDrive = { speed: 28, steer: 0 };
   return 'night';
 }

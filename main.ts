@@ -1,17 +1,8 @@
-// Vice Bay: Blood & Destiny — entrypoint.
-//
-// Copies game/ + screenshots/ to the output directory and writes
-// dossier.json there via buildDossier from ./vendor/makefun-game.ts.
-//
-// Paths are resolved from THIS file's location (import.meta.url), never
-// from process.cwd(): the grader runs `node /bot/main.ts` from another
-// working directory, so a cwd-relative game/ would crash with
-// "game/: no such directory".
-//
-// Plain JavaScript only — no TypeScript annotations, interfaces or enums —
-// so Node 22 runs this file with no flags, no build and no install.
-
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+// Vice Bay: Blood & Destiny — entrypoint. Copies game/ and screenshots/ into the
+// output directory and writes dossier.json from the kit's buildDossier.
+// Paths resolve from this file's own location (import.meta.url), never from
+// process.cwd(), so the grader's `node /bot/main.ts` works from any directory.
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
@@ -19,7 +10,9 @@ import { buildDossier } from './vendor/makefun-game.ts';
 const repoRoot = dirname(fileURLToPath(import.meta.url));
 const gameDir = join(repoRoot, 'game');
 const shotsDir = join(repoRoot, 'screenshots');
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ? resolve(process.env.MAKEFUN_OUTPUT_DIR) : '/output';
+const outDir = process.env.MAKEFUN_OUTPUT_DIR
+  ? resolve(process.cwd(), process.env.MAKEFUN_OUTPUT_DIR)
+  : '/output';
 
 const CAPS = {
   text_max_bytes: 163840,
@@ -28,12 +21,8 @@ const CAPS = {
   game_max_bytes: 50331648,
 };
 
-if (!existsSync(gameDir) || !statSync(gameDir).isDirectory()) {
-  throw new Error(`game/: no such directory next to main.ts (${gameDir})`);
-}
-if (!existsSync(join(gameDir, 'index.html'))) {
-  throw new Error('game/index.html: no such file');
-}
+if (!existsSync(gameDir)) throw new Error('game/: no such directory');
+if (!existsSync(join(gameDir, 'index.html'))) throw new Error('game/index.html: no such file');
 
 mkdirSync(outDir, { recursive: true });
 // Clear stale output first, so a re-run never ships files from an older build.
@@ -51,16 +40,18 @@ const shotCount = readdirSync(join(outDir, 'screenshots')).filter((f) => /\.(png
 console.log(`Vice Bay: copied game/ and ${shotCount} screenshot(s) to ${outDir}`);
 
 const dossier = buildDossier(outDir, CAPS);
-writeFileSync(join(outDir, 'dossier.json'), dossier);
+const dossierPath = join(outDir, 'dossier.json');
+writeFileSync(dossierPath, dossier);
 
-// Round-trip: the dossier on disk must equal a fresh buildDossier call.
-// Compare String(...) primitives: buildDossier returns a String object or
-// a byte array, so normalize both sides to the same string primitive first.
+// Round-trip check: the written dossier must equal a fresh buildDossier call.
+// buildDossier returns bytes; both sides are normalised to String primitives
+// before the comparison so the check compares strings, not objects.
+const writtenText = String(Buffer.from(readFileSync(dossierPath)).toString('utf8'));
 const roundTrip = buildDossier(outDir, CAPS);
-const written = readFileSync(join(outDir, 'dossier.json'), 'utf8');
-const roundTripText = roundTrip instanceof Uint8Array ? Buffer.from(roundTrip).toString('utf8') : String(roundTrip);
-if (String(written) !== String(roundTripText)) {
-  throw new Error('dossier.json round-trip mismatch: the file on disk differs from a fresh buildDossier call');
-}
-
-console.log(`Vice Bay: wrote ${join(outDir, 'dossier.json')} (${written.length} bytes)`);
+const roundTripText = String(
+  roundTrip instanceof Uint8Array
+    ? Buffer.from(roundTrip).toString('utf8')
+    : String(roundTrip)
+);
+if (writtenText !== roundTripText) throw new Error('dossier.json: round-trip mismatch');
+console.log(`Vice Bay: wrote ${dossierPath} (${writtenText.length} chars)`);
