@@ -1,49 +1,46 @@
-// Vice Bay: Blood & Destiny — deterministic random numbers (sfc32).
-// Every system that needs chance takes one of these, so a ?seed=N run replays exactly.
+// Deterministic seeded random numbers for Vice Bay.
+// Every procedural part of the city uses one seeded stream so the world
+// looks identical on every load and every machine.
 
-export function createRandom(seed) {
+export function mulberry32(seed) {
   let a = seed >>> 0;
-  let b = (seed ^ 0x9e3779b9) >>> 0;
-  let c = (seed * 2654435761) >>> 0;
-  let d = (seed ^ 0x85ebca6b) >>> 0;
-  // Warm the state up so the first draws are not correlated with the seed.
-  for (let i = 0; i < 12; i++) next();
-  function next() {
-    const t = (a + b) | 0;
-    a = b ^ (b >>> 9);
-    b = (c + (c << 3)) | 0;
-    c = (c << 21) | (c >>> 11);
-    d = (d + 1) | 0;
-    const out = (t + d) | 0;
-    c = (c + out) | 0;
-    return (out >>> 0) / 4294967296;
-  }
+  return function next() {
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+export function hash2(x, z, seed) {
+  let h = (Math.imul(x | 0, 374761393) + Math.imul(z | 0, 668265263) + Math.imul(seed | 0, 974634211)) | 0;
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  h ^= h >>> 16;
+  return (h >>> 0) / 4294967296;
+}
+
+export function makeRng(seed) {
+  const next = mulberry32(seed);
   return {
     next,
-    range(min, max) {
-      return min + next() * (max - min);
+    range(a, b) {
+      return a + (b - a) * next();
     },
-    int(min, max) {
-      return Math.floor(min + next() * (max - min + 1));
+    int(a, b) {
+      return Math.floor(a + (b - a + 1) * next());
     },
-    pick(list) {
-      return list[Math.floor(next() * list.length)];
+    pick(arr) {
+      return arr[Math.floor(next() * arr.length)];
     },
     chance(p) {
       return next() < p;
     },
-    angle() {
-      return next() * Math.PI * 2;
+    // Deterministic per-cell value in [0, 1): same input, same output.
+    cell(x, z) {
+      return hash2(x, z, seed);
     },
   };
 }
 
-/** A tiny string hash for turning names into stable seeds. */
-export function hashString(text) {
-  let h = 2166136261;
-  for (let i = 0; i < text.length; i++) {
-    h ^= text.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
+export const WORLD_SEED = 20261121;

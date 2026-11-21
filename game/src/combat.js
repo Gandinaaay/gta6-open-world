@@ -1,97 +1,83 @@
-// Vice Bay: Blood & Destiny — weapons and combat.
-// Hitscan shooting with a visible tracer: a shot is a ray from the player toward the
-// aim point, and anything it crosses within range takes damage. Melee is a short arc.
+// Combat: fists and a pistol. Punch the nearest pedestrian, or shoot with
+// a hitscan ray from the camera. Every violent act raises the heat.
 
-import { WEAPONS } from './config.js';
+import { WANTED } from './config.js';
+import { hitPedestrian } from './traffic.js';
+import { addHeat } from './police.js';
+import { pressed } from './input.js';
 
-const THREE = globalThis.THREE;
+let cooldown = 0;
+let flash = null;
 
-export function createCombat(scene) {
-  const group = new THREE.Group();
-  group.name = 'combat';
-  scene.add(group);
-  const tracers = [];
-  const tracerMat = new THREE.MeshBasicMaterial({ color: 0xffe9a8 });
-  const tracerGeo = new THREE.BoxGeometry(0.06, 0.06, 1);
-
-  let weapon = 'pistol';
-  let cooldown = 0;
-  let ammo = { pistol: 48, smg: 120, shotgun: 16 };
-
-  function fire(from, aimDir, targets, onHit) {
-    if (cooldown > 0) return false;
-    const spec = WEAPONS[weapon];
-    cooldown = 1 / spec.rate;
-    if (weapon === 'fist') {
-      for (const t of targets) {
-        const d = Math.hypot(t.position.x - from.x, t.position.z - from.z);
-        if (d < spec.range) onHit(t, spec.damage);
+export function updateCombat(G, dt) {
+  cooldown = Math.max(0, cooldown - dt);
+  const p = G.player;
+  // punch
+  if (pressed(G, 'KeyF') && !p.inVehicle) {
+    let best = null;
+    let bestD = 2.6;
+    for (const ped of G.pedestrians) {
+      if (ped.down) continue;
+      const d = Math.hypot(ped.x - p.x, ped.z - p.z);
+      if (d < bestD) {
+        bestD = d;
+        best = ped;
       }
-      return true;
     }
-    if ((ammo[weapon] ?? 0) <= 0) return false;
-    ammo[weapon] -= 1;
-    const pellets = weapon === 'shotgun' ? 5 : 1;
-    for (let p = 0; p < pellets; p++) {
-      const spread = weapon === 'shotgun' ? 0.09 : 0.015;
-      const dir = aimDir.clone();
-      dir.x += (Math.random() - 0.5) * spread;
-      dir.z += (Math.random() - 0.5) * spread;
-      dir.normalize();
-      const end = from.clone().add(dir.clone().multiplyScalar(spec.range));
-      let best = null;
-      let bestD = spec.range;
-      for (const t of targets) {
-        // Treat a target as a vertical capsule: test the ray against its axis segment.
-        const to = new THREE.Vector3(t.position.x - from.x, 0, t.position.z - from.z);
-        const along = to.dot(dir);
-        if (along < 0 || along > bestD) continue;
-        const closest = from.clone().add(dir.clone().multiplyScalar(along));
-        const dd = Math.hypot(closest.x - t.position.x, closest.z - t.position.z);
-        if (dd < 1.1) {
-          best = t;
-          bestD = along;
+    if (best) {
+      hitPedestrian(G, best);
+      addHeat(G, WANTED.assault);
+      if (G.audio) G.audio.punch();
+      if (G.hud) G.hud.flash('You laid them out cold.');
+    }
+  }
+  // shoot: hitscan from the camera through the click point
+  if (G.input.clicked && cooldown <= 0 && !p.inVehicle) {
+    cooldown = 0.28;
+    G.stats.shotsFired += 1;
+    shoot(G);
+  }
+}
+
+function shoot(G) {
+  const ray = new THREE.Raycaster();
+  const ndc = new THREE.Vector2(
+    (G.input.clickX / window.innerWidth) * 2 - 1,
+    -(G.input.clickY / window.innerHeight) * 2 + 1,
+  );
+  ray.setFromCamera(ndc, G.camera);
+  ray.far = 220;
+  const targets = [];
+  for (const ped of G.pedestrians) if (!ped.down) targets.push(ped.group);
+  for (const v of G.vehicles) targets.push(v.group);
+  const hits = ray.intersectObjects(targets, true);
+  if (hits.length > 0) {
+    let obj = hits[0].object;
+    while (obj.parent && obj.parent !== G.scene) obj = obj.parent;
+    const ped = G.pedestrians.find((x) => x.group === obj);
+    if (ped) {
+      hitPedestrian(G, ped);
+      addHeat(G, WANTED.shoot);
+    } else {
+      const veh = G.vehicles.find((x) => x.group === obj);
+      if (veh) {
+        veh.health = Math.max(0, veh.health - 12);
+        addHeat(G, WANTED.shoot);
+        if (veh.health <= 0 && veh.driver !== G.player) {
+          veh.speed = 0;
         }
       }
-      const len = best ? bestD : spec.range;
-      const tracer = new THREE.Mesh(tracerGeo, tracerMat);
-      const mid = from.clone().add(dir.clone().multiplyScalar(len / 2));
-      tracer.position.set(mid.x, 1.3, mid.z);
-      tracer.scale.z = len;
-      tracer.lookAt(from.x + dir.x * len, 1.3, from.z + dir.z * len);
-      tracer.rotation.x = 0;
-      group.add(tracer);
-      tracers.push({ mesh: tracer, life: 0.09 });
-      if (best) onHit(best, spec.damage);
-      end.copy(from);
     }
-    return true;
+  } else {
+    addHeat(G, 4);
   }
-
-  function update(dt) {
-    cooldown = Math.max(0, cooldown - dt);
-    for (let i = tracers.length - 1; i >= 0; i--) {
-      const t = tracers[i];
-      t.life -= dt;
-      if (t.life <= 0) {
-        group.remove(t.mesh);
-        tracers.splice(i, 1);
-      }
-    }
+  if (G.audio) G.audio.shot();
+  // muzzle flash: a brief point light at the camera
+  if (!flash) {
+    flash = new THREE.PointLight(0xffd27d, 0, 18);
+    G.scene.add(flash);
   }
-
-  function setWeapon(name) {
-    if (WEAPONS[name]) weapon = name;
-  }
-
-  function giveAmmo(name, n) {
-    ammo[name] = (ammo[name] ?? 0) + n;
-  }
-
-  return {
-    fire, update, setWeapon, giveAmmo,
-    get weapon() { return weapon; },
-    get spec() { return WEAPONS[weapon]; },
-    get ammo() { return ammo[weapon] ?? Infinity; },
-  };
+  flash.position.copy(G.camera.position).add(new THREE.Vector3(0, -0.4, 0));
+  flash.intensity = 26;
+  setTimeout(() => { if (flash) flash.intensity = 0; }, 60);
 }

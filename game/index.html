@@ -1,84 +1,86 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Vice Bay: Blood &amp; Destiny</title>
 <style>
-  html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0b1026; font-family: 'Segoe UI', Arial, sans-serif; color: #fff; }
-  #game { display: block; width: 100vw; height: 100vh; }
-  #hud { position: fixed; inset: 0; pointer-events: none; }
-  .panel { position: absolute; background: rgba(8, 14, 26, 0.72); border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 8px 12px; }
-  #hud-top-left { top: 12px; left: 12px; min-width: 220px; }
-  #health-bar { width: 180px; height: 10px; background: #333; border-radius: 5px; overflow: hidden; margin: 4px 0; }
-  #health-fill { height: 100%; width: 100%; background: #3fae5a; }
-  #health-text { font-size: 12px; color: #cfe8d4; }
-  #money-text { font-size: 20px; font-weight: bold; color: #7dff8a; }
-  #stars { font-size: 20px; letter-spacing: 2px; color: #ffd94a; margin-top: 2px; }
-  #clock { font-size: 14px; color: #fff; margin-top: 2px; }
-  #hud-top-right { top: 12px; right: 12px; }
-  #minimap { width: 160px; height: 160px; border-radius: 4px; display: block; }
-  #mission-box { left: 50%; transform: translateX(-50%); bottom: 18px; max-width: 560px; text-align: center; }
-  #mission-text { font-size: 15px; }
-  #toast { left: 50%; transform: translateX(-50%); top: 70px; font-size: 17px; font-weight: bold; color: #ffd94a; opacity: 0; transition: opacity 0.3s; text-shadow: 0 2px 4px #000; }
-  #status { position: fixed; left: 50%; top: 40%; transform: translate(-50%, -50%); background: #5a1010; padding: 16px 22px; border-radius: 8px; display: none; max-width: 480px; text-align: center; }
-  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(5, 8, 18, 0.78); text-align: center; z-index: 10; }
-  .screen h1 { font-size: 54px; margin: 0 0 4px; color: #ff5a4a; text-shadow: 0 0 24px rgba(255, 90, 74, 0.6); letter-spacing: 2px; }
-  .screen h2 { font-size: 22px; margin: 0 0 18px; color: #ffd94a; font-weight: normal; letter-spacing: 4px; }
-  .screen p { max-width: 560px; line-height: 1.55; color: #dfe8ff; }
-  .screen button { pointer-events: auto; font-size: 20px; padding: 12px 34px; margin-top: 18px; border: none; border-radius: 8px; background: #d23c2e; color: #fff; cursor: pointer; }
-  .screen button:hover { background: #e84a38; }
-  .controls { font-size: 13px; color: #9db8e8; margin-top: 14px; line-height: 1.7; }
-  #screen-pause, #screen-over { display: none; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0b1026;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; color: #fff; }
+  #app { position: fixed; inset: 0; }
+  #app canvas { display: block; }
+  .hud { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+  .hud-tl { position: absolute; top: 14px; left: 16px; }
+  .hud-money { font-size: 30px; font-weight: 800; color: #7cf29c;
+    text-shadow: 0 2px 6px rgba(0,0,0,.8); letter-spacing: 1px; }
+  .hud-health { display: flex; align-items: center; gap: 6px; margin-top: 6px;
+    color: #ff8a80; font-size: 15px; text-shadow: 0 1px 4px #000; }
+  .hud-healthbar { width: 150px; height: 10px; background: rgba(0,0,0,.55);
+    border: 1px solid rgba(255,255,255,.35); border-radius: 5px; overflow: hidden; }
+  .hud-healthfill { height: 100%; width: 100%; background: linear-gradient(90deg,#ff5252,#ff8a80); }
+  .hud-tr { position: absolute; top: 14px; right: 16px; text-align: right; }
+  .hud-stars { font-size: 26px; letter-spacing: 4px; text-shadow: 0 2px 6px #000; }
+  .hud-clock { font-size: 22px; font-weight: 700; text-shadow: 0 2px 6px #000; }
+  .hud-district { font-size: 14px; opacity: .9; text-shadow: 0 1px 4px #000; }
+  .hud-objective { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%);
+    text-align: center; background: rgba(0,0,0,.55); border: 1px solid rgba(255,213,79,.5);
+    border-radius: 10px; padding: 10px 22px; max-width: 460px; }
+  .hud-obj-title { font-size: 17px; font-weight: 800; color: #ffd54f; }
+  .hud-obj-step { font-size: 14px; opacity: .95; margin-top: 2px; }
+  .hud-flash { position: absolute; left: 50%; top: 22%; transform: translateX(-50%);
+    font-size: 26px; font-weight: 800; text-align: center; color: #fff;
+    text-shadow: 0 2px 10px #000, 0 0 24px rgba(255,213,79,.6);
+    opacity: 0; transition: opacity .4s; max-width: 80%; }
+  .hud-hint { position: absolute; left: 50%; top: 32%; transform: translateX(-50%);
+    font-size: 15px; color: #ffe082; text-shadow: 0 1px 4px #000;
+    opacity: 0; transition: opacity .3s; }
+  .hud-cross { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    font-size: 22px; color: rgba(255,255,255,.75); text-shadow: 0 0 4px #000; }
+  .hud-mapwrap { position: absolute; left: 16px; bottom: 16px; border: 2px solid rgba(255,255,255,.4);
+    border-radius: 8px; overflow: hidden; background: #0e1a24; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+  .hud-map { display: block; width: 200px; height: 200px; }
+  .hud-help { position: absolute; right: 16px; bottom: 16px; font-size: 12px;
+    background: rgba(0,0,0,.5); padding: 7px 10px; border-radius: 8px; opacity: .85; }
+  .hud-menubtn { position: absolute; right: 16px; bottom: 56px; pointer-events: auto;
+    background: #ffd54f; color: #222; border: none; border-radius: 8px;
+    font-weight: 800; font-size: 14px; padding: 9px 14px; cursor: pointer; }
+  .hud-menu { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    width: min(620px, 92vw); max-height: 82vh; overflow-y: auto; pointer-events: auto;
+    background: rgba(10,14,24,.96); border: 2px solid #ffd54f; border-radius: 14px; padding: 20px; }
+  .hud-menu h2 { color: #ffd54f; margin-bottom: 10px; }
+  .hud-menu h3 { color: #90caf9; margin: 14px 0 6px; }
+  .hud-mrow { border-bottom: 1px solid rgba(255,255,255,.12); padding: 10px 2px; }
+  .hud-mtitle { font-weight: 800; font-size: 15px; }
+  .hud-mdesc { font-size: 13px; opacity: .85; margin: 3px 0 8px; }
+  .hud-mbtn { background: #43a047; color: #fff; border: none; border-radius: 6px;
+    padding: 7px 14px; font-weight: 700; cursor: pointer; }
+  .hud-mbtn:disabled { background: #555; cursor: default; }
+  .hud-menuclose { margin-top: 14px; background: #333; color: #fff; border: 1px solid #777;
+    border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+  #start-overlay { position: fixed; inset: 0; z-index: 10; display: flex;
+    flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: linear-gradient(160deg, #1a0b2e 0%, #4a1942 45%, #b34724 100%); cursor: pointer; }
+  #start-overlay h1 { font-size: min(64px, 9vw); font-weight: 900; letter-spacing: 2px;
+    text-align: center; line-height: 1.05; text-shadow: 0 4px 30px rgba(0,0,0,.7); }
+  #start-overlay h1 span { color: #ffd54f; }
+  #start-overlay p { font-size: 17px; opacity: .92; text-align: center; max-width: 560px; padding: 0 20px; }
+  #start-btn { background: #ffd54f; color: #221133; border: none; border-radius: 12px;
+    font-size: 20px; font-weight: 900; padding: 14px 34px; cursor: pointer;
+    box-shadow: 0 6px 24px rgba(0,0,0,.5); }
+  #start-overlay small { opacity: .7; font-size: 13px; }
 </style>
+<script src="./vendor/three.min.js"></script>
 </head>
 <body>
-<canvas id="game"></canvas>
-<div id="hud">
-  <div class="panel" id="hud-top-left">
-    <div id="money-text">$500</div>
-    <div id="health-bar"><div id="health-fill"></div></div>
-    <div id="health-text">100</div>
-    <div id="stars">☆☆☆☆☆</div>
-    <div id="clock">07:40</div>
-  </div>
-  <div class="panel" id="hud-top-right">
-    <canvas id="minimap" width="160" height="160"></canvas>
-  </div>
-  <div class="panel" id="mission-box"><span id="mission-text">Welcome to Vice Bay.</span></div>
-  <div id="toast"></div>
+<div id="app"></div>
+<div id="start-overlay">
+  <h1>VICE BAY<br><span>BLOOD &amp; DESTINY</span></h1>
+  <p>An original open-world crime game. Explore a 2&nbsp;km coastal city on foot and by car,
+  run missions for Don Sal, outrun the police, and build your empire — all offline, in your browser.</p>
+  <button id="start-btn">▶ &nbsp;START GAME</button>
+  <small>WASD move / drive · Mouse orbit · E enter car · F punch · Click shoot · M missions · P pause</small>
 </div>
-<div id="status"></div>
-
-<div class="screen" id="screen-title">
-  <h1>VICE BAY</h1>
-  <h2>BLOOD &amp; DESTINY</h2>
-  <p>Rico Vega owes the crews of Vice Bay — and the Bay always collects. Drive, fight
-  and survive ten story jobs across eight districts, from Ocean Beach to the Criminal
-  District, while the police hunt you down star by star.</p>
-  <button id="btn-start">Start the story</button>
-  <div class="controls">WASD / arrows — move &amp; drive &nbsp;·&nbsp; Shift — run &nbsp;·&nbsp; Space — jump<br>
-  E — enter / exit car &nbsp;·&nbsp; Click — shoot &nbsp;·&nbsp; 1–4 — weapons &nbsp;·&nbsp; Drag — orbit camera<br>
-  P — pause &nbsp;·&nbsp; M — mute</div>
-</div>
-
-<div class="screen" id="screen-pause">
-  <h1>PAUSED</h1>
-  <p>Take a breath, Rico. The Bay waits.</p>
-  <button id="btn-resume">Resume</button>
-  <button id="btn-title">Quit to title</button>
-</div>
-
-<div class="screen" id="screen-over">
-  <h1>WASTED</h1>
-  <p>Vice Bay got the better of you this time. Your money and finished jobs are saved — try again.</p>
-  <button id="btn-restart">Try again</button>
-</div>
-
-<script type="importmap">
-{ "imports": { "three": "./vendor/three.min.js" } }
-</script>
-<script src="./vendor/three.min.js"></script>
 <script type="module" src="./src/main.js"></script>
 </body>
 </html>

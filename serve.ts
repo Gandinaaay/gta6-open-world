@@ -1,46 +1,49 @@
-// Vice Bay: Blood & Destiny — tiny static server for local development only.
-// Serves game/ on http://localhost:8080 (or $PORT). Not part of the entry.
+// Vice Bay: Blood & Destiny — tiny static dev server (serve.ts, Node 22).
+// Serves the repository root so the game can be played at
+// http://localhost:PORT/game/ . Plain JavaScript in a .ts file, no deps.
 
-import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
-import { extname, join } from 'node:path';
+import http from 'node:http';
+import fs from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-// fileURLToPath(new URL('.', import.meta.url)) already IS this file's directory
-// (with a trailing slash). Do NOT wrap it in dirname: dirname strips the last
-// segment, so it would point at the parent directory instead.
-const here = fileURLToPath(new URL('.', import.meta.url));
-const root = join(here, 'game');
-const MIME = {
-  '.html': 'text/html',
-  '.js': 'text/javascript',
-  '.mjs': 'text/javascript',
-  '.json': 'application/json',
-  '.jpg': 'image/jpeg',
-  '.png': 'image/png',
-  '.css': 'text/css',
-};
+const rootDir = fileURLToPath(new URL('.', import.meta.url));
 const port = Number(process.env.PORT || 8080);
 
-const server = createServer(async (req, res) => {
-  const path = decodeURIComponent(new URL(req.url ?? '/', 'http://localhost').pathname);
-  const file = join(root, path === '/' ? 'index.html' : path);
-  if (!file.startsWith(root)) {
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.svg': 'image/svg+xml',
+  '.md': 'text/markdown; charset=utf-8',
+};
+
+const server = http.createServer((req, res) => {
+  const url = new URL(req.url || '/', 'http://localhost');
+  let pathname = decodeURIComponent(url.pathname);
+  if (pathname === '/') pathname = '/game/index.html';
+  const file = path.join(rootDir, pathname);
+  if (!file.startsWith(rootDir)) {
     res.writeHead(403);
     res.end('forbidden');
     return;
   }
-  try {
-    const data = await readFile(file);
-    res.writeHead(200, { 'Content-Type': MIME[extname(file)] || 'application/octet-stream' });
+  fs.readFile(file, (err, data) => {
+    if (err) {
+      res.writeHead(404);
+      res.end('not found');
+      return;
+    }
+    res.writeHead(200, { 'content-type': MIME[path.extname(file)] || 'application/octet-stream' });
     res.end(data);
-  } catch (err) {
-    console.error(`serve failed for ${req.url} -> ${file}: ${err.message}`);
-    res.writeHead(404);
-    res.end('not found');
-  }
+  });
 });
 
 server.listen(port, () => {
-  console.log(`Vice Bay: Blood & Destiny at http://localhost:${port}`);
+  console.log(`Vice Bay dev server: http://localhost:${port}/game/`);
 });

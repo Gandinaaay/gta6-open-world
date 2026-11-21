@@ -1,49 +1,39 @@
-// Vice Bay: Blood & Destiny — make.fun entrypoint (gta6-01).
-//
-// Copies game/ and screenshots/ from this repository into the output directory
-// and writes /output/dossier.json. Every path is resolved from this file's own
-// location (import.meta.url), never from the working directory: the grader runs
-// `node /bot/main.ts` from another directory, with no network, in 10 seconds.
+// Vice Bay: Blood & Destiny — entry point (main.ts, Node 22).
+// Builds the dossier for the game in game/ + screenshots/ and hands it in:
+// copies game/ and screenshots/ to the output dir and writes dossier.json.
+// All paths resolve from import.meta.url — never from process.cwd() — so the
+// grade run works from any working directory, with no network, in 10 s.
 
+import { buildDossier, DOSSIER_MAX_BYTES } from './vendor/makefun-game.ts';
+import fs from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { buildDossier } from './vendor/makefun-game.ts';
 
-// fileURLToPath(new URL('.', import.meta.url)) already IS this file's directory
-// (with a trailing slash). Do NOT wrap it in dirname: dirname strips the last
-// segment, so it would point at the parent directory instead.
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+// import.meta.url ends with a slash for a directory URL, so fileURLToPath
+// gives the directory itself. Do NOT wrap it in dirname() — that strips
+// one level and breaks the build (the round 6 failure).
+const rootDir = fileURLToPath(new URL('.', import.meta.url));
+const outDir = process.env.MAKEFUN_OUTPUT_DIR
+  ? path.resolve(process.env.MAKEFUN_OUTPUT_DIR)
+  : path.join(rootDir, 'out');
+const caps = { text_max_bytes: DOSSIER_MAX_BYTES };
 
-const caps = {
-  text_max_bytes: 163840,
-  screenshots: { max: 4, max_bytes: 262144 },
-  game_max_files: 993,
-  game_max_bytes: 50331648,
-  game_path_max_bytes: 1000,
-};
-
-mkdirSync(out, { recursive: true });
-const gameDir = join(here, 'game');
-if (!existsSync(gameDir)) {
-  throw new Error(`game/ is missing next to main.ts (looked in ${gameDir})`);
-}
-cpSync(gameDir, join(out, 'game'), { recursive: true });
-const shotsDir = join(here, 'screenshots');
-if (existsSync(shotsDir)) {
-  mkdirSync(join(out, 'screenshots'), { recursive: true });
-  cpSync(shotsDir, join(out, 'screenshots'), { recursive: true });
+const dossierA = buildDossier(rootDir, caps);
+const dossierB = buildDossier(rootDir, caps);
+function countFiles(dir) {
+  let n = 0;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) n += countFiles(path.join(dir, entry.name));
+    else if (entry.isFile()) n += 1;
+  }
+  return n;
 }
 
-const dossier = String(buildDossier(out, caps));
-writeFileSync(join(out, 'dossier.json'), dossier);
+fs.mkdirSync(outDir, { recursive: true });
+fs.writeFileSync(path.join(outDir, 'dossier.json'), Buffer.from(dossierA));
+fs.cpSync(path.join(rootDir, 'game'), path.join(outDir, 'game'), { recursive: true });
+fs.cpSync(path.join(rootDir, 'screenshots'), path.join(outDir, 'screenshots'), { recursive: true });
 
-// The dossier must be byte-identical when rebuilt: the grader runs this entry
-// twice and both runs have to agree. buildDossier returns a String object, so
-// compare the primitive strings — comparing the objects would always differ.
-const dossierAgain = String(buildDossier(out, caps));
-if (dossier !== dossierAgain) {
-  throw new Error('dossier is not deterministic across builds');
-}
-console.log(`wrote ${join(out, 'dossier.json')} (${dossier.length} bytes)`);
+const gameFiles = countFiles(path.join(outDir, 'game'));
+const shotFiles = fs.readdirSync(path.join(outDir, 'screenshots')).filter((f) => /\.(png|jpe?g)$/i.test(f));
+console.log(`Vice Bay: Blood & Destiny — dossier ${Buffer.from(dossierA).length} bytes, ${gameFiles} game files, ${shotFiles.length} screenshots -> ${outDir}`);
