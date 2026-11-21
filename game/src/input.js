@@ -1,40 +1,104 @@
-// Keyboard + mouse input. `pressed` holds keys hit since the last frame
-// (edge-triggered); main.js clears it every frame.
+// Vice Bay: Blood & Destiny — keyboard and mouse input.
+// WASD/arrows move, Shift runs, Space jumps, E interacts, 1-4 switch weapons,
+// P pauses, M mutes. Mouse click (or holding it) fires the current weapon.
 
-export function createInput() {
+export const ACTION_CONFIRM = 'confirm';
+
+export function createInput(canvas) {
   const keys = new Set();
-  const pressed = new Set();
-  const mouse = { dx: 0, dy: 0, down: false, x: 0, y: 0 };
-  let enabled = true;
-
-  const down = (e) => {
-    if (!enabled) return;
-    const k = e.key.toLowerCase();
-    if (!keys.has(k)) pressed.add(k);
-    keys.add(k);
-    if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
+  const state = {
+    forward: false,
+    back: false,
+    left: false,
+    right: false,
+    run: false,
+    jump: false,
+    interact: false,
+    firing: false,
+    pausePressed: false,
+    mutePressed: false,
+    weaponSlot: 0,
   };
-  const up = (e) => {
-    keys.delete(e.key.toLowerCase());
-  };
-  const move = (e) => { mouse.dx += e.movementX || 0; mouse.dy += e.movementY || 0; mouse.x = e.clientX; mouse.y = e.clientY; };
-  const mdown = (e) => { mouse.down = true; mouse.x = e.clientX; mouse.y = e.clientY; };
-  const mup = () => { mouse.down = false; };
+  let jumpQueued = false;
+  let interactQueued = false;
 
-  window.addEventListener('keydown', down);
-  window.addEventListener('keyup', up);
-  window.addEventListener('mousemove', move);
-  window.addEventListener('mousedown', mdown);
-  window.addEventListener('mouseup', mup);
-
-  return {
-    keys, pressed, mouse,
-    is(k) { return keys.has(k); },
-    wasPressed(k) { return pressed.has(k); },
-    endFrame() { pressed.clear(); mouse.dx = 0; mouse.dy = 0; },
-    setEnabled(v) { enabled = v; },
-    // Test helpers: simulate a key press without a real keyboard.
-    press(k) { if (!keys.has(k)) pressed.add(k); keys.add(k); },
-    release(k) { keys.delete(k); },
+  const MOVE_KEYS = {
+    KeyW: 'forward', ArrowUp: 'forward',
+    KeyS: 'back', ArrowDown: 'back',
+    KeyA: 'left', ArrowLeft: 'left',
+    KeyD: 'right', ArrowRight: 'right',
   };
+
+  function refresh() {
+    state.forward = keys.has('KeyW') || keys.has('ArrowUp');
+    state.back = keys.has('KeyS') || keys.has('ArrowDown');
+    state.left = keys.has('KeyA') || keys.has('ArrowLeft');
+    state.right = keys.has('KeyD') || keys.has('ArrowRight');
+    state.run = keys.has('ShiftLeft') || keys.has('ShiftRight');
+    // Queued presses survive until the game step reads them: OR them in, never
+    // overwrite, so a keydown between steps is not lost by the next refresh.
+    state.jump = jumpQueued || state.jump;
+    state.interact = interactQueued || state.interact;
+    jumpQueued = false;
+    interactQueued = false;
+  }
+
+  function onKeyDown(e) {
+    if (e.repeat) return;
+    keys.add(e.code);
+    if (e.code === 'Space') {
+      jumpQueued = true;
+      e.preventDefault();
+    }
+    if (e.code === 'KeyE') interactQueued = true;
+    if (e.code === 'KeyP' || e.code === 'Escape') state.pausePressed = true;
+    if (e.code === 'KeyM') state.mutePressed = true;
+    if (e.code === 'Digit1') state.weaponSlot = 0;
+    if (e.code === 'Digit2') state.weaponSlot = 1;
+    if (e.code === 'Digit3') state.weaponSlot = 2;
+    if (e.code === 'Digit4') state.weaponSlot = 3;
+    if (MOVE_KEYS[e.code] || e.code === 'Space') e.preventDefault();
+    refresh();
+  }
+
+  function onKeyUp(e) {
+    keys.delete(e.code);
+    refresh();
+  }
+
+  function onMouseDown(e) {
+    if (e.button === 0) state.firing = true;
+  }
+
+  function onMouseUp(e) {
+    if (e.button === 0) state.firing = false;
+  }
+
+  function onBlur() {
+    keys.clear();
+    state.firing = false;
+    refresh();
+  }
+
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', onBlur);
+  if (canvas) {
+    canvas.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mouseup', onMouseUp);
+  }
+
+  function consumePause() {
+    const v = state.pausePressed;
+    state.pausePressed = false;
+    return v;
+  }
+
+  function consumeMute() {
+    const v = state.mutePressed;
+    state.mutePressed = false;
+    return v;
+  }
+
+  return { state, refresh, consumePause, consumeMute };
 }

@@ -1,63 +1,49 @@
-// Vice Bay: Blood & Destiny — entrypoint.
+// Vice Bay: Blood & Destiny — make.fun entrypoint (gta6-01).
 //
-// Copies game/ + screenshots/ to the output directory and writes
-// dossier.json there via buildDossier from ./vendor/makefun-game.ts.
-//
-// Paths are resolved from THIS file's location (import.meta.url), never
-// from process.cwd(): the grader runs `node /bot/main.ts` from another
-// working directory, so a cwd-relative game/ would crash with
-// "game/: no such directory" (that is exactly how round 6 failed).
-//
-// Plain JavaScript only — no TypeScript annotations, interfaces or enums —
-// so Node 22 runs this file with no flags, no build and no install.
+// Copies game/ and screenshots/ from this repository into the output directory
+// and writes /output/dossier.json. Every path is resolved from this file's own
+// location (import.meta.url), never from the working directory: the grader runs
+// `node /bot/main.ts` from another directory, with no network, in 10 seconds.
 
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { buildDossier } from './vendor/makefun-game.ts';
 
-const repoRoot = dirname(fileURLToPath(import.meta.url));
-const gameDir = join(repoRoot, 'game');
-const shotsDir = join(repoRoot, 'screenshots');
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ? resolve(process.env.MAKEFUN_OUTPUT_DIR) : '/output';
+// fileURLToPath(new URL('.', import.meta.url)) already IS this file's directory
+// (with a trailing slash). Do NOT wrap it in dirname: dirname strips the last
+// segment, so it would point at the parent directory instead.
+const here = fileURLToPath(new URL('.', import.meta.url));
+const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-const CAPS = {
+const caps = {
   text_max_bytes: 163840,
   screenshots: { max: 4, max_bytes: 262144 },
   game_max_files: 993,
   game_max_bytes: 50331648,
+  game_path_max_bytes: 1000,
 };
 
-if (!existsSync(gameDir) || !statSync(gameDir).isDirectory()) {
-  throw new Error(`game/: no such directory next to main.ts (${gameDir})`);
+mkdirSync(out, { recursive: true });
+const gameDir = join(here, 'game');
+if (!existsSync(gameDir)) {
+  throw new Error(`game/ is missing next to main.ts (looked in ${gameDir})`);
 }
-if (!existsSync(join(gameDir, 'index.html'))) {
-  throw new Error('game/index.html: no such file');
-}
-
-mkdirSync(outDir, { recursive: true });
-// Clear stale output first, so a re-run never ships files from an older build.
-for (const sub of ['game', 'screenshots']) {
-  const target = join(outDir, sub);
-  if (existsSync(target)) rmSync(target, { recursive: true, force: true });
-}
-cpSync(gameDir, join(outDir, 'game'), { recursive: true });
+cpSync(gameDir, join(out, 'game'), { recursive: true });
+const shotsDir = join(here, 'screenshots');
 if (existsSync(shotsDir)) {
-  cpSync(shotsDir, join(outDir, 'screenshots'), { recursive: true });
-} else {
-  mkdirSync(join(outDir, 'screenshots'), { recursive: true });
-}
-const shotCount = readdirSync(join(outDir, 'screenshots')).filter((f) => /\.(png|jpe?g)$/i.test(f)).length;
-console.log(`Vice Bay: copied game/ and ${shotCount} screenshot(s) to ${outDir}`);
-
-const dossier = buildDossier(outDir, CAPS);
-writeFileSync(join(outDir, 'dossier.json'), dossier);
-
-// Round-trip: the dossier on disk must equal a fresh buildDossier call.
-const roundTrip = buildDossier(outDir, CAPS);
-const written = readFileSync(join(outDir, 'dossier.json'));
-if (!written.equals(roundTrip)) {
-  throw new Error('dossier.json round-trip mismatch: the file on disk differs from a fresh buildDossier call');
+  mkdirSync(join(out, 'screenshots'), { recursive: true });
+  cpSync(shotsDir, join(out, 'screenshots'), { recursive: true });
 }
 
-console.log(`Vice Bay: wrote ${join(outDir, 'dossier.json')} (${written.length} bytes)`);
+const dossier = String(buildDossier(out, caps));
+writeFileSync(join(out, 'dossier.json'), dossier);
+
+// The dossier must be byte-identical when rebuilt: the grader runs this entry
+// twice and both runs have to agree. buildDossier returns a String object, so
+// compare the primitive strings — comparing the objects would always differ.
+const dossierAgain = String(buildDossier(out, caps));
+if (dossier !== dossierAgain) {
+  throw new Error('dossier is not deterministic across builds');
+}
+console.log(`wrote ${join(out, 'dossier.json')} (${dossier.length} bytes)`);

@@ -1,26 +1,49 @@
-// Seeded PRNG (sfc32) so the city, traffic and shots are deterministic per seed.
+// Vice Bay: Blood & Destiny — deterministic random numbers (sfc32).
+// Every system that needs chance takes one of these, so a ?seed=N run replays exactly.
 
-export function sfc32(a, b, c, d) {
-  let _a = a >>> 0, _b = b >>> 0, _c = c >>> 0, _d = d >>> 0;
-  return function next() {
-    _a >>>= 0; _b >>>= 0; _c >>>= 0; _d >>>= 0;
-    let t = (_a + _b | 0) + _d | 0;
-    _d = _d + 1 | 0;
-    _a = _b ^ _b >>> 9;
-    _b = _c + (_c << 3) | 0;
-    _c = _c << 21 | _c >>> 11;
-    _c = _c + t | 0;
-    return (t >>> 0) / 4294967296;
+export function createRandom(seed) {
+  let a = seed >>> 0;
+  let b = (seed ^ 0x9e3779b9) >>> 0;
+  let c = (seed * 2654435761) >>> 0;
+  let d = (seed ^ 0x85ebca6b) >>> 0;
+  // Warm the state up so the first draws are not correlated with the seed.
+  for (let i = 0; i < 12; i++) next();
+  function next() {
+    const t = (a + b) | 0;
+    a = b ^ (b >>> 9);
+    b = (c + (c << 3)) | 0;
+    c = (c << 21) | (c >>> 11);
+    d = (d + 1) | 0;
+    const out = (t + d) | 0;
+    c = (c + out) | 0;
+    return (out >>> 0) / 4294967296;
+  }
+  return {
+    next,
+    range(min, max) {
+      return min + next() * (max - min);
+    },
+    int(min, max) {
+      return Math.floor(min + next() * (max - min + 1));
+    },
+    pick(list) {
+      return list[Math.floor(next() * list.length)];
+    },
+    chance(p) {
+      return next() < p;
+    },
+    angle() {
+      return next() * Math.PI * 2;
+    },
   };
 }
 
-export function makeRng(seed) {
-  const rand = sfc32(seed, seed * 31 + 7, seed * 101 + 13, seed * 7 + 1);
-  return {
-    next: rand,
-    range(min, max) { return min + rand() * (max - min); },
-    int(min, max) { return Math.floor(this.range(min, max + 1)); },
-    pick(arr) { return arr[Math.floor(rand() * arr.length)]; },
-    chance(p) { return rand() < p; },
-  };
+/** A tiny string hash for turning names into stable seeds. */
+export function hashString(text) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
 }

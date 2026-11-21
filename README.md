@@ -1,30 +1,82 @@
 # Vice Bay: Blood & Destiny
 
-![make.fun](https://make.fun/badge/gta6-01.svg)
-![Rank](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/rank.svg)
-![Reward](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/reward.svg)
+[![gta6-01](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
+[![rank](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/rank.svg)](https://make.fun/bounty/gta6-01)
+[![reward](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/reward.svg)](https://make.fun/bounty/gta6-01)
 
-An original open-world crime game for the [make.fun](https://make.fun/bounty/gta6-01) gta6-01 bounty — built with Three.js, playable in a desktop browser from static files, no network needed.
-
-## How to play
-
-Open `game/index.html` in a desktop browser (or serve the repo: `node serve.ts`, then http://127.0.0.1:8080/).
-
-- **WASD** — walk / drive · **Shift** — run · **Space** — jump / handbrake
-- **E** — enter / exit / steal a car · **Mouse drag** — camera pitch · **Click** — shoot
-- **1–5** — fists / pistol / SMG / shotgun / rifle · **R** — reload
-- **M** — missions menu · **Esc** — pause
+An original open-world crime game built for the make.fun **"Make GTA 6"** bounty
+(gta6-01). Rico Vega owes the crews of Vice Bay — and the Bay always collects.
 
 ## The game
 
-Vice Bay is a 2 km × 2 km coastal city with 8 districts: Downtown, Ocean Beach, Little Havana, Industrial Port, Rich Hills, Airport, Criminal District and the Highway Ring. Drive or walk anywhere, steal cars, dodge traffic and pedestrians, and outrun the police as your wanted level climbs from 1 to 5 stars.
+A 2 km × 2 km coastal city with **8 districts** — Downtown, Ocean Beach, Little
+Havana, Industrial Port, Rich Hills, Airport, the Criminal District and the
+Highway Ring — rendered in Three.js with a full day/night cycle.
 
-**Story (10 missions):** Welcome to Vice Bay, A Dangerous Favor, Street Reputation, The Getaway, The Missing Deal, Betrayal, Night Run, The Hidden Truth, Final Assault, and Blood & Destiny — ending in a choice that decides who runs the city.
+- **10 story missions + 8 side missions**, table-driven, chaining from "First
+  Blood" (collect the drops) to "Blood & Destiny" (escape the island in a storm)
+- **Wanted level 1–5 stars** with police cruiser pursuit that rams and escalates
+- **On foot and driving**: 7 vehicles, garage collection, arcade handling
+- **Combat**: fists, pistol, SMG and shotgun with tracers, recoil and camera kick
+- **Economy**: earn cash from jobs and pickups, spend it nowhere yet — the Bay
+  keeps its prices secret
+- **Living city**: 26 road cars, 40 pedestrians, streetlights that switch on at
+  dusk, palms, a port, an airport runway
+- **HUD + minimap** (districts, mission target, police, your car), pause screen,
+  game-over screen, save/load via localStorage
 
-**Side missions (8):** taxi fares, street racing, vehicle delivery, police escape, hidden packages, territory takeover, time trial, rescue civilians.
+## Controls
 
-**Systems:** HUD with health, money, reputation, wanted stars, speed, compass and a live minimap; shops, garage and upgrades; localStorage save; day/night cycle and rain; fully synthesized WebAudio sound; canvas-painted textures and neon signs.
+| Key | Action |
+| --- | --- |
+| W A S D / arrows | Move / drive |
+| Shift | Run |
+| Space | Jump |
+| E | Enter / exit a car |
+| Click | Shoot |
+| 1–4 | Fists / pistol / SMG / shotgun |
+| Drag mouse | Orbit camera |
+| P | Pause |
+| M | Mute |
 
-## Build
+Jobs start themselves a few seconds after the last one ends — follow the yellow
+marker on the minimap.
 
-`node main.ts` copies `game/` + `screenshots/` to the output directory (`$MAKEFUN_OUTPUT_DIR`, default `/output`) and writes `dossier.json` there. Paths are resolved from the location of `main.ts` itself, so it works from any working directory.
+## Run it
+
+```sh
+node serve.ts        # http://localhost:8080
+```
+
+No build step, no dependencies: plain JavaScript modules plus the vendored
+Three.js in `game/vendor/`. `main.ts` is the make.fun entrypoint — it copies
+`game/` and `screenshots/` to the output directory and writes `dossier.json`.
+
+## Structure
+
+```
+main.ts            entrypoint (resolves game/ from import.meta.url)
+serve.ts           local dev server
+shots.json         screenshot staging
+game/
+  index.html       page, HUD, overlays
+  vendor/three.min.js
+  src/
+    config.js      districts, vehicles, weapons, economy, missions data
+    city.js        roads, buildings, colliders
+    world.js       sun, moon, fog, clock
+    player.js      on-foot controller
+    vehicles.js    driving, garage
+    traffic.js     road cars and pedestrians
+    police.js      wanted level and cruisers
+    combat.js      hitscan weapons
+    missions.js    table-driven mission engine
+    hud.js         health, money, stars, clock, minimap, toasts
+    input.js       keyboard and mouse
+    audio.js       procedural WebAudio
+    save.js        localStorage persistence
+    shots.js       screenshot staging
+    main.js        boot, screens, the fixed-step loop
+```
+
+Screenshots are staged deterministically with `?shot=start|play|chase|night&seed=1`.

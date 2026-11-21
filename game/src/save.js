@@ -1,22 +1,44 @@
-// localStorage save: money, rep, health, story progress, time, weather,
-// player position. Nothing leaves the browser.
+// Vice Bay: Blood & Destiny — saving and loading with localStorage.
+// Only the player's progress is stored: money, owned cars, finished missions and
+// the best chase survived. Nothing else leaves the machine.
 
-import { CONFIG } from './config.js';
+import { WORLD } from './config.js';
 
-export function saveGame(state) {
+export function loadSave() {
   try {
-    localStorage.setItem(CONFIG.saveKey, JSON.stringify(state));
-    return true;
-  } catch { return false; }
+    const raw = window.localStorage.getItem(WORLD.saveKey);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data || typeof data !== 'object') return null;
+    return {
+      money: typeof data.money === 'number' ? data.money : 500,
+      garage: Array.isArray(data.garage) ? data.garage.filter((x) => typeof x === 'string') : ['Vice Sedan'],
+      missionsDone: Array.isArray(data.missionsDone) ? data.missionsDone : [],
+      bestChase: typeof data.bestChase === 'number' ? data.bestChase : 0,
+      muted: data.muted === true,
+    };
+  } catch {
+    return null;
+  }
 }
 
-export function loadGame() {
+export function saveSave(state) {
   try {
-    const raw = localStorage.getItem(CONFIG.saveKey);
-    return raw ? JSON.parse(raw) : null;
-  } catch { return null; }
+    window.localStorage.setItem(WORLD.saveKey, JSON.stringify({
+      money: state.money,
+      garage: state.garage,
+      missionsDone: state.missionsDone,
+      bestChase: state.bestChase,
+      muted: state.muted,
+    }));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function clearSave() {
-  try { localStorage.removeItem(CONFIG.saveKey); } catch { /* ignore */ }
+  try {
+    window.localStorage.removeItem(WORLD.saveKey);
+  } catch { /* storage unavailable; nothing to clear */ }
 }

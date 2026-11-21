@@ -1,70 +1,56 @@
-// The 4 staged screenshot scenes (?shot=start|play|chase|night&seed=1).
-// Each arranges the world deterministically, then main.js renders frames
-// and sets window.__shotReady when the scene is settled.
+// Vice Bay: Blood & Destiny — screenshot staging for ?shot=start|play|chase|night.
+// Each shot places the camera, the player and (where it fits) a car and police, then
+// paints the scene twice and sets window.__shotReady so the screenshot tool knows
+// the frame is final. Deterministic: the same seed stages the same picture.
 
-export function stageShot(ctx, name) {
-  const { world, player, vehicles, police, hud, traffic } = ctx;
-  // Clear any leftover police.
-  police.clear();
-  hud.showTitle(false);
-  hud.showPause(false);
-  hud.showMenu(false);
+export const SHOT_NAMES = ['start', 'play', 'chase', 'night'];
 
-  if (name === 'start') {
-    world.setTimeOfDay(0.06); // dawn
-    world.setWeather('clear');
-    player.reset(0, 40);
-    const car = vehicles.spawn('comet', 6, 30, Math.PI);
-    car.driver = null;
-    ctx.camera.position.set(-30, 26, -60);
-    ctx.camera.lookAt(0, 10, 60);
-    ctx.shotCamera = { x: -30, y: 26, z: -60, look: [0, 10, 60] };
-    hud.showTitle(true);
-    return 'start';
+export function stageShot(kind, api) {
+  const { player, camera, worldState, police, hud, spawnCar } = api;
+  if (kind === 'start') {
+    // On foot in Downtown at dawn: the player, the streets and the towers.
+    player.teleport(0, 20);
+    camera.set(6, 6, 32, 0, 2, 20);
+    worldState.setTime(0.32);
+  } else if (kind === 'play') {
+    // Behind the wheel of the Vice Sedan on a Downtown avenue, morning.
+    player.teleport(0, 100);
+    const car = spawnCar('Vice Sedan', 0, 100, 0);
+    api.enterVehicle(car);
+    camera.set(12, 12, 78, 0, 3, 100);
+    worldState.setTime(0.38);
+  } else if (kind === 'chase') {
+    // The Interceptor, three stars, cruisers closing in — afternoon.
+    player.teleport(0, 60);
+    const car = spawnCar('Interceptor', 0, 60, 0);
+    api.enterVehicle(car);
+    police.addCrime(3.0);
+    police.update(0.5, player.position, 20);
+    camera.set(16, 12, 36, 0, 3, 58);
+    worldState.setTime(0.62);
+  } else if (kind === 'night') {
+    // Vice Bay after dark: lit windows, streetlights, the player on foot.
+    player.teleport(40, 40);
+    camera.set(66, 26, 14, 40, 4, 40);
+    worldState.setTime(0.02);
+  } else {
+    player.teleport(0, 20);
+    camera.set(6, 6, 32, 0, 2, 20);
+    worldState.setTime(0.32);
   }
-
-  if (name === 'play') {
-    world.setTimeOfDay(0.3); // morning
-    world.setWeather('clear');
-    const car = vehicles.spawn('comet', 0, 0, 0);
-    car.driver = 'player';
-    player.enterCar(car);
-    car.speed = 22;
-    // A little traffic around downtown.
-    vehicles.spawn('sedan', -12, 120, 0).driver = 'traffic';
-    vehicles.spawn('taxi', 12, -80, Math.PI).driver = 'traffic';
-    ctx.shotDrive = { speed: 22, steer: 0 };
-    return 'play';
-  }
-
-  if (name === 'chase') {
-    world.setTimeOfDay(0.62); // night
-    world.setWeather('clear');
-    const car = vehicles.spawn('comet', 0, 0, 0);
-    car.driver = 'player';
-    player.enterCar(car);
-    car.speed = 30;
-    police.addHeat(3);
-    // Bring the pursuit cars into the frame ahead of the player (the chase
-    // camera looks forward, so cops behind the player are never visible).
-    const cops = vehicles.list.filter((c) => c.driver === 'police');
-    cops.forEach((c, i) => {
-      c.pos.set(-10 - i * 4, 0, 60 + i * 50);
-      c.heading = 0;
-      c.speed = 30;
-    });
-    ctx.shotDrive = { speed: 30, steer: 0 };
-    return 'chase';
-  }
-
-  // night: beach race in the rain — on the road, not the grass.
-  world.setTimeOfDay(0.8);
-  world.setWeather('rain');
-  const car = vehicles.spawn('comet', -800, 600, 0);
-  car.driver = 'player';
-  player.enterCar(car);
-  car.speed = 26;
-  vehicles.spawn('sedan', -800, 720, 0).driver = 'traffic';
-  ctx.shotDrive = { speed: 26, steer: 0 };
-  return 'night';
+  // The HUD is only refreshed by the game loop, which does not run for shots:
+  // sync it once here so the clock, the wanted stars and the minimap match the
+  // staged scene before the screenshot is taken.
+  hud.setClock(worldState.clockText(), worldState.isNight());
+  hud.setWanted(police.stars);
+  hud.drawMinimap(
+    player.position,
+    null,
+    police.cruisers.map((c) => c.position),
+    null,
+  );
+  // Paint twice so shadows and the first frame settle, then signal readiness.
+  api.render();
+  api.render();
+  window.__shotReady = true;
 }

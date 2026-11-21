@@ -1,117 +1,109 @@
-// The player on foot: walk/run/jump, enter and exit cars.
+// Vice Bay: Blood & Destiny — the player on foot: movement, jumping, camera.
+// The character is a simple built-up figure; collisions are AABB push-outs against the
+// city's building boxes, so the player can never walk through a wall.
 
-import { CONFIG } from './config.js';
+import { PLAYER, WORLD } from './config.js';
 
-export function createPlayer(scene) {
-  const body = new THREE.Group();
-  const torso = new THREE.Mesh(
-    new THREE.BoxGeometry(0.7, 1.0, 0.4),
-    new THREE.MeshLambertMaterial({ color: 0x1e40af }),
+const THREE = globalThis.THREE;
+
+function collideCircle(pos, radius, colliders) {
+  for (const b of colliders) {
+    const dx = pos.x - Math.max(b.x - b.hw, Math.min(pos.x, b.x + b.hw));
+    const dz = pos.z - Math.max(b.z - b.hd, Math.min(pos.z, b.z + b.hd));
+    const d2 = dx * dx + dz * dz;
+    if (d2 < radius * radius) {
+      const d = Math.sqrt(d2) || 0.001;
+      const push = (radius - d) / d;
+      pos.x += dx * push;
+      pos.z += dz * push;
+    }
+  }
+}
+
+export function createPlayer(scene, colliders) {
+  const group = new THREE.Group();
+  group.name = 'player';
+  const jacket = new THREE.Mesh(
+    new THREE.BoxGeometry(0.9, 1.0, 0.5),
+    new THREE.MeshLambertMaterial({ color: 0x8b1e1e }),
   );
-  torso.position.y = 1.1;
+  jacket.position.y = 1.05;
+  jacket.castShadow = true;
   const head = new THREE.Mesh(
-    new THREE.BoxGeometry(0.45, 0.45, 0.45),
-    new THREE.MeshLambertMaterial({ color: 0xe8b98a }),
+    new THREE.SphereGeometry(0.32, 12, 10),
+    new THREE.MeshLambertMaterial({ color: 0xd9a066 }),
   );
   head.position.y = 1.85;
+  head.castShadow = true;
   const legs = new THREE.Mesh(
-    new THREE.BoxGeometry(0.6, 0.7, 0.35),
-    new THREE.MeshLambertMaterial({ color: 0x111827 }),
+    new THREE.BoxGeometry(0.8, 0.6, 0.45),
+    new THREE.MeshLambertMaterial({ color: 0x1c2733 }),
   );
-  legs.position.y = 0.35;
-  body.add(torso, head, legs);
-  scene.add(body);
+  legs.position.y = 0.3;
+  group.add(jacket, head, legs);
+  scene.add(group);
 
-  const pos = new THREE.Vector3(0, 0, 0);
-  const vel = new THREE.Vector3();
+  const pos = new THREE.Vector3(0, 0, 120);
   let heading = 0;
+  let vy = 0;
   let grounded = true;
-  let currentCar = null;
-  let lean = 0;
+  let moving = false;
 
-  function collide(colliders, p) {
-    for (const c of colliders) {
-      const dx = p.x - c.x, dz = p.z - c.z;
-      const d = Math.hypot(dx, dz);
-      if (d < c.r + 0.6 && d > 0.001) {
-        const push = (c.r + 0.6 - d) / d;
-        p.x += dx * push;
-        p.z += dz * push;
-      }
+  function update(dt, input, camYaw) {
+    const run = input.run ? PLAYER.run : PLAYER.walk;
+    let fx = 0;
+    let fz = 0;
+    if (input.forward) fz -= 1;
+    if (input.back) fz += 1;
+    if (input.left) fx -= 1;
+    if (input.right) fx += 1;
+    moving = fx !== 0 || fz !== 0;
+    const len = Math.hypot(fx, fz) || 1;
+    fx /= len;
+    fz /= len;
+    // Movement is relative to the camera yaw: the camera sits at
+    // target + (sin(yaw), cos(yaw)) * dist, so W walks away from the camera.
+    const sin = Math.sin(camYaw);
+    const cos = Math.cos(camYaw);
+    const mx = (fx * cos + fz * sin) * run;
+    const mz = (-fx * sin + fz * cos) * run;
+    pos.x += mx * dt;
+    pos.z += mz * dt;
+    if (moving) heading = Math.atan2(mx, mz);
+    // Gravity and jumping.
+    vy -= WORLD.gravity * dt;
+    pos.y += vy * dt;
+    if (pos.y <= 0) {
+      pos.y = 0;
+      vy = 0;
+      grounded = true;
     }
-    const half = CONFIG.worldSize / 2 - 5;
-    p.x = Math.max(-half, Math.min(half, p.x));
-    p.z = Math.max(-half, Math.min(half, p.z));
+    if (input.jump && grounded) {
+      vy = PLAYER.jump;
+      grounded = false;
+      input.jump = false; // consume the press so landing does not re-jump
+    }
+    // Keep inside the city and out of buildings.
+    pos.x = Math.max(-WORLD.half + 4, Math.min(WORLD.half - 4, pos.x));
+    pos.z = Math.max(-WORLD.half + 4, Math.min(WORLD.half - 4, pos.z));
+    collideCircle(pos, PLAYER.radius, colliders);
+    group.position.copy(pos);
+    group.rotation.y = heading;
+    // A small walk bob so the figure reads as moving.
+    const bob = moving && grounded ? Math.sin(performance.now() * 0.02) * 0.05 : 0;
+    jacket.position.y = 1.05 + bob;
   }
 
   return {
-    mesh: body,
-    pos,
+    group,
+    get position() { return pos; },
     get heading() { return heading; },
-    get inCar() { return currentCar !== null; },
-    get car() { return currentCar; },
-    reset(x, z) {
+    get moving() { return moving; },
+    get grounded() { return grounded; },
+    update,
+    teleport(x, z) {
       pos.set(x, 0, z);
-      vel.set(0, 0, 0);
-      heading = 0;
-      currentCar = null;
-      body.visible = true;
-    },
-    enterCar(car) {
-      currentCar = car;
-      body.visible = false;
-    },
-    exitCar() {
-      if (!currentCar) return null;
-      const car = currentCar;
-      currentCar = null;
-      const side = new THREE.Vector3(Math.cos(car.heading + Math.PI / 2), 0, -Math.sin(car.heading + Math.PI / 2));
-      pos.copy(car.pos).addScaledVector(side, 3);
-      pos.y = 0;
-      body.visible = true;
-      return car;
-    },
-    update(dt, input, colliders, camYaw) {
-      if (currentCar) return;
-      const run = input.is('shift');
-      const speed = run ? CONFIG.runSpeed : CONFIG.walkSpeed;
-      let mx = 0, mz = 0;
-      if (input.is('w') || input.is('arrowup')) mz -= 1;
-      if (input.is('s') || input.is('arrowdown')) mz += 1;
-      if (input.is('a') || input.is('arrowleft')) mx -= 1;
-      if (input.is('d') || input.is('arrowright')) mx += 1;
-      const len = Math.hypot(mx, mz) || 1;
-      mx /= len; mz /= len;
-      // Camera-relative movement.
-      const sin = Math.sin(camYaw), cos = Math.cos(camYaw);
-      const wx = (mx * cos - mz * sin) * speed;
-      const wz = (mx * sin + mz * cos) * speed;
-      vel.x += (wx - vel.x) * Math.min(1, dt * 10);
-      vel.z += (wz - vel.z) * Math.min(1, dt * 10);
-      if ((input.is(' ') || input.is('spacebar')) && grounded) {
-        vel.y = CONFIG.jumpSpeed;
-        grounded = false;
-      }
-      vel.y -= CONFIG.gravity * dt;
-      pos.x += vel.x * dt;
-      pos.z += vel.z * dt;
-      pos.y += vel.y * dt;
-      if (pos.y <= 0) { pos.y = 0; vel.y = 0; grounded = true; }
-      collide(colliders, pos);
-      if (Math.hypot(vel.x, vel.z) > 0.5) {
-        heading = Math.atan2(vel.x, vel.z);
-      }
-      // Strafe lean + landing squash.
-      const targetLean = Math.abs(mx) * 0.15 * Math.sign(mx);
-      lean += (targetLean - lean) * Math.min(1, dt * 8);
-      body.position.copy(pos);
-      body.rotation.y = heading;
-      body.rotation.z = lean;
-      const squash = grounded ? 1 : 0.92;
-      body.scale.y = squash;
-      // Walk bob.
-      const bob = Math.hypot(vel.x, vel.z) > 1 ? Math.sin(performance.now() * 0.02) * 0.05 : 0;
-      torso.position.y = 1.1 + bob;
+      group.position.copy(pos);
     },
   };
 }

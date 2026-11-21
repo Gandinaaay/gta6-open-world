@@ -1,104 +1,123 @@
-// Canvas-painted textures: every surface is generated at boot, no image files.
+// Vice Bay: Blood & Destiny — procedural textures, painted on canvas at boot.
+// No image file is loaded: every surface the city shows is drawn here, so the game
+// works fully offline and every run with the same seed looks the same.
 
-function canvas(w, h) {
-  const c = document.createElement('canvas');
-  c.width = w; c.height = h;
-  return c;
+const THREE = globalThis.THREE;
+
+function canvasTexture(size, draw, repeatX = 1, repeatY = 1) {
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  draw(ctx, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeatX, repeatY);
+  tex.anisotropy = 4;
+  return tex;
 }
 
-function tex(c) {
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = THREE.RepeatWrapping;
-  t.wrapT = THREE.RepeatWrapping;
-  t.anisotropy = 4;
-  return t;
+function speckle(ctx, size, rand, colors, count, minR, maxR) {
+  for (let i = 0; i < count; i++) {
+    ctx.fillStyle = colors[Math.floor(rand.next() * colors.length)];
+    const r = minR + rand.next() * (maxR - minR);
+    ctx.beginPath();
+    ctx.arc(rand.next() * size, rand.next() * size, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 
-export function makeTextures(rng) {
-  // Asphalt road with dashes and edge lines.
-  const road = canvas(256, 256);
-  {
-    const g = road.getContext('2d');
-    g.fillStyle = '#23262b'; g.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 900; i++) {
-      g.fillStyle = `rgba(255,255,255,${rng.next() * 0.05})`;
-      g.fillRect(rng.next() * 256, rng.next() * 256, 2, 2);
-    }
-    g.fillStyle = '#f5c542'; g.fillRect(126, 0, 4, 256);
-    g.fillStyle = '#e5e7eb'; g.fillRect(8, 0, 3, 256); g.fillRect(245, 0, 3, 256);
-    g.fillStyle = '#f5c542';
-    for (let y = 0; y < 256; y += 64) g.fillRect(126, y, 4, 32);
-  }
-  // Building facade with lit windows.
-  const facade = (base, lit) => {
-    const c = canvas(128, 256);
-    const g = c.getContext('2d');
-    g.fillStyle = base; g.fillRect(0, 0, 128, 256);
-    for (let y = 12; y < 244; y += 24) {
-      for (let x = 10; x < 118; x += 22) {
-        g.fillStyle = rng.next() < lit ? '#ffd97a' : '#1f2937';
-        g.fillRect(x, y, 14, 14);
-      }
-    }
-    return tex(c);
-  };
-  // Neon sign with text.
-  const neon = (text, color) => {
-    const c = canvas(512, 128);
-    const g = c.getContext('2d');
-    g.fillStyle = '#0b0b12'; g.fillRect(0, 0, 512, 128);
-    g.font = 'bold 64px Arial';
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.shadowColor = color; g.shadowBlur = 28;
-    g.fillStyle = color;
-    g.fillText(text, 256, 64);
-    g.shadowBlur = 0;
-    g.fillStyle = '#ffffff';
-    g.fillText(text, 256, 64);
-    return tex(c);
-  };
-  // Sidewalk / plaza tiles.
-  const sidewalk = canvas(128, 128);
-  {
-    const g = sidewalk.getContext('2d');
-    g.fillStyle = '#6b7280'; g.fillRect(0, 0, 128, 128);
-    g.strokeStyle = '#4b5563'; g.lineWidth = 2;
-    for (let i = 0; i <= 128; i += 32) {
-      g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 128); g.stroke();
-      g.beginPath(); g.moveTo(0, i); g.lineTo(128, i); g.stroke();
+function facade(ctx, size, rand, base, litRatio) {
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, size, size);
+  // Window grid: some windows lit, most dark.
+  const cols = 6;
+  const rows = 9;
+  const cw = size / cols;
+  const ch = size / rows;
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const lit = rand.next() < litRatio;
+      ctx.fillStyle = lit ? '#ffd98a' : '#20242c';
+      ctx.fillRect(x * cw + cw * 0.2, y * ch + ch * 0.22, cw * 0.6, ch * 0.56);
     }
   }
-  // Grass for parks and beach sand.
-  const grass = canvas(128, 128);
-  {
-    const g = grass.getContext('2d');
-    g.fillStyle = '#2d5a2d'; g.fillRect(0, 0, 128, 128);
-    for (let i = 0; i < 500; i++) {
-      g.fillStyle = rng.chance(0.5) ? '#356b35' : '#244d24';
-      g.fillRect(rng.next() * 128, rng.next() * 128, 3, 3);
+  speckle(ctx, size, rand, ['#00000022', '#ffffff14'], 40, 1, 3);
+}
+
+export function makeTextures(rand) {
+  const asphalt = canvasTexture(128, (ctx, s) => {
+    ctx.fillStyle = '#26292e';
+    ctx.fillRect(0, 0, s, s);
+    speckle(ctx, s, rand, ['#33373d', '#1c1e22', '#3a3e45'], 500, 0.5, 2);
+  }, 40, 40);
+
+  const sidewalk = canvasTexture(128, (ctx, s) => {
+    ctx.fillStyle = '#8a8f96';
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = '#6f747b';
+    ctx.lineWidth = 2;
+    for (let i = 0; i <= 4; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0, (i * s) / 4);
+      ctx.lineTo(s, (i * s) / 4);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo((i * s) / 4, 0);
+      ctx.lineTo((i * s) / 4, s);
+      ctx.stroke();
     }
-  }
-  const sand = canvas(128, 128);
-  {
-    const g = sand.getContext('2d');
-    g.fillStyle = '#d9c08a'; g.fillRect(0, 0, 128, 128);
-    for (let i = 0; i < 400; i++) {
-      g.fillStyle = rng.chance(0.5) ? '#c9ae72' : '#e8d3a0';
-      g.fillRect(rng.next() * 128, rng.next() * 128, 2, 2);
+    speckle(ctx, s, rand, ['#7a7f86', '#9aa0a7'], 200, 0.5, 1.5);
+  }, 30, 30);
+
+  const grass = canvasTexture(128, (ctx, s) => {
+    ctx.fillStyle = '#4d7a3a';
+    ctx.fillRect(0, 0, s, s);
+    speckle(ctx, s, rand, ['#5d8a46', '#3d6a2e', '#6a9a52'], 700, 0.5, 2.5);
+  }, 24, 24);
+
+  const sand = canvasTexture(128, (ctx, s) => {
+    ctx.fillStyle = '#d9c27a';
+    ctx.fillRect(0, 0, s, s);
+    speckle(ctx, s, rand, ['#c9b26a', '#e8d28e', '#bfa55e'], 600, 0.5, 2);
+  }, 20, 20);
+
+  const water = canvasTexture(128, (ctx, s) => {
+    ctx.fillStyle = '#1e5f8a';
+    ctx.fillRect(0, 0, s, s);
+    ctx.strokeStyle = '#2f7aa8';
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 8; i++) {
+      const y = rand.next() * s;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.bezierCurveTo(s * 0.3, y + 6, s * 0.7, y - 6, s, y);
+      ctx.stroke();
     }
-  }
-  return {
-    road: tex(road),
-    sidewalk: tex(sidewalk),
-    grass: tex(grass),
-    sand: tex(sand),
-    facadeDowntown: facade('#374151', 0.55),
-    facadeHavana: facade('#b45309', 0.45),
-    facadePort: facade('#4b5563', 0.25),
-    facadeHills: facade('#78350f', 0.7),
-    neonTide: neon('NEON TIDE', '#22d3ee'),
-    neonHavana: neon('HAVANA MARKET', '#f97316'),
-    neonVice: neon('VICE BAY', '#ec4899'),
-    neonPier: neon('PIER 21', '#a78bfa'),
-  };
+  }, 12, 12);
+
+  const facades = [
+    canvasTexture(256, (ctx, s) => facade(ctx, s, rand, '#5a6b7d', 0.28)),
+    canvasTexture(256, (ctx, s) => facade(ctx, s, rand, '#7d5a4a', 0.2)),
+    canvasTexture(256, (ctx, s) => facade(ctx, s, rand, '#4a5a6b', 0.34)),
+    canvasTexture(256, (ctx, s) => facade(ctx, s, rand, '#6b6b52', 0.16)),
+  ];
+
+  const roof = canvasTexture(128, (ctx, s) => {
+    ctx.fillStyle = '#3c4046';
+    ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = '#4a4e55';
+    ctx.fillRect(8, 8, s - 16, s - 16);
+    speckle(ctx, s, rand, ['#33373d', '#55595f'], 120, 1, 3);
+  });
+
+  const roadLine = canvasTexture(64, (ctx, s) => {
+    ctx.fillStyle = '#26292e';
+    ctx.fillRect(0, 0, s, s);
+    ctx.fillStyle = '#e8c832';
+    ctx.fillRect(s / 2 - 3, 0, 6, s / 2);
+  }, 1, 40);
+
+  return { asphalt, sidewalk, grass, sand, water, facades, roof, roadLine };
 }

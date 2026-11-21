@@ -1,107 +1,112 @@
-// HUD: DOM overlay (health, money, rep, wanted stars, speed, compass,
-// objective) + a live minimap canvas. Also the title screen and menus.
+// Vice Bay: Blood & Destiny — the HUD: health, money, wanted stars, clock, mission
+// text and a live minimap. All DOM lives in index.html; this module only writes to it,
+// so the game keeps working even if a HUD element is missing.
+
+import { DISTRICTS, WORLD } from './config.js';
 
 export function createHud() {
-  const root = document.getElementById('hud');
-  const el = {};
-  for (const id of ['health', 'money', 'rep', 'stars', 'speed', 'objective', 'compass', 'flash', 'title', 'menu', 'menu-list', 'pause']) {
-    el[id] = document.getElementById(id);
+  const el = (id) => document.getElementById(id);
+  const healthFill = el('health-fill');
+  const healthText = el('health-text');
+  const moneyText = el('money-text');
+  const starsEl = el('stars');
+  const clockEl = el('clock');
+  const missionEl = el('mission-text');
+  const toastEl = el('toast');
+  const minimap = el('minimap');
+  const mapCtx = minimap ? minimap.getContext('2d') : null;
+  let toastTimer = 0;
+
+  function setHealth(hp) {
+    const pct = Math.max(0, Math.min(100, hp));
+    if (healthFill) healthFill.style.width = `${pct}%`;
+    if (healthFill) healthFill.style.background = pct > 50 ? '#3fae5a' : pct > 25 ? '#e8a33c' : '#d23c2e';
+    if (healthText) healthText.textContent = `${Math.ceil(pct)}`;
   }
-  const minimap = document.getElementById('minimap');
-  const mm = minimap.getContext('2d');
 
-  let flashTimer = 0;
-
-  function stars(n) {
-    return '★'.repeat(n) + '☆'.repeat(5 - n);
+  function setMoney(n) {
+    if (moneyText) moneyText.textContent = `$${Math.floor(n).toLocaleString('en-US')}`;
   }
 
-  return {
-    setHealth(h) {
-      el.health.style.width = `${Math.max(0, Math.min(100, h))}%`;
-      el.health.style.background = h > 50 ? '#22c55e' : h > 25 ? '#f59e0b' : '#ef4444';
-    },
-    setMoney(m) { el.money.textContent = `$${Math.floor(m).toLocaleString('en-US')}`; },
-    setRep(r) { el.rep.textContent = `REP ${r}`; },
-    setWanted(n, flashOn) {
-      el.stars.textContent = stars(n);
-      el.stars.style.color = n > 0 ? (flashOn ? '#ffffff' : '#facc15') : '#9ca3af';
-    },
-    setSpeed(kmh) { el.speed.textContent = `${Math.round(Math.abs(kmh))} km/h`; },
-    setObjective(text, dist) {
-      el.objective.textContent = dist !== null && dist !== undefined ? `${text} — ${Math.round(dist)}m` : text;
-    },
-    setCompass(yaw) {
-      const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-      const deg = ((yaw * 180 / Math.PI) % 360 + 360) % 360;
-      el.compass.textContent = dirs[Math.round(deg / 45) % 8];
-    },
-    flash(text) {
-      el.flash.textContent = text;
-      el.flash.style.opacity = 1;
-      flashTimer = 3;
-    },
-    update(dt) {
-      if (flashTimer > 0) {
-        flashTimer -= dt;
-        if (flashTimer <= 0) el.flash.style.opacity = 0;
-      }
-    },
-    showTitle(show) { el.title.style.display = show ? 'flex' : 'none'; },
-    showPause(show) { el.pause.style.display = show ? 'flex' : 'none'; },
-    showMenu(show, rows) {
-      el.menu.style.display = show ? 'flex' : 'none';
-      if (show && rows) {
-        el['menu-list'].innerHTML = rows.map((r) =>
-          `<div class="menu-row${r.current ? ' current' : ''}${r.done ? ' done' : ''}">${r.done ? '✓ ' : ''}${r.name} — ${r.desc || ''}</div>`).join('');
-      }
-    },
-    drawMinimap(px, pz, yaw, objective, cars, peds, cops, range = 300) {
-      const w = minimap.width, h = minimap.height;
-      mm.clearRect(0, 0, w, h);
-      mm.fillStyle = 'rgba(10, 15, 25, 0.85)';
-      mm.fillRect(0, 0, w, h);
-      const scale = w / (range * 2);
-      const toMap = (x, z) => [w / 2 + (x - px) * scale, h / 2 + (z - pz) * scale];
-      // Roads.
-      mm.strokeStyle = '#4b5563';
-      mm.lineWidth = 3;
-      for (let i = -4; i <= 4; i++) {
-        const p = i * 200;
-        const [x1, y1] = toMap(p, pz - range);
-        const [x2, y2] = toMap(p, pz + range);
-        mm.beginPath(); mm.moveTo(x1, y1); mm.lineTo(x2, y2); mm.stroke();
-        const [x3, y3] = toMap(px - range, p);
-        const [x4, y4] = toMap(px + range, p);
-        mm.beginPath(); mm.moveTo(x3, y3); mm.lineTo(x4, y4); mm.stroke();
-      }
-      // Objective ring (pulsing).
-      if (objective) {
-        const [ox, oy] = toMap(objective.x, objective.z);
-        const pulse = 6 + Math.sin(performance.now() * 0.006) * 3;
-        mm.strokeStyle = '#facc15';
-        mm.lineWidth = 2;
-        mm.beginPath(); mm.arc(ox, oy, pulse, 0, Math.PI * 2); mm.stroke();
-        mm.fillStyle = '#facc15';
-        mm.beginPath(); mm.arc(ox, oy, 3, 0, Math.PI * 2); mm.fill();
-      }
-      // Traffic (white), peds (grey), cops (blue/red flashing).
-      mm.fillStyle = '#e5e7eb';
-      for (const c of cars) { const [x, y] = toMap(c.pos.x, c.pos.z); mm.fillRect(x - 1, y - 1, 2, 2); }
-      mm.fillStyle = '#9ca3af';
-      for (const p of peds) { const [x, y] = toMap(p.pos.x, p.pos.z); mm.fillRect(x - 1, y - 1, 2, 2); }
-      for (const c of cops) {
-        const [x, y] = toMap(c.pos.x, c.pos.z);
-        mm.fillStyle = Math.floor(performance.now() / 300) % 2 ? '#3b82f6' : '#ef4444';
-        mm.beginPath(); mm.arc(x, y, 3, 0, Math.PI * 2); mm.fill();
-      }
-      // Player arrow.
-      mm.save();
-      mm.translate(w / 2, h / 2);
-      mm.rotate(-yaw);
-      mm.fillStyle = '#22c55e';
-      mm.beginPath(); mm.moveTo(0, -7); mm.lineTo(5, 6); mm.lineTo(-5, 6); mm.closePath(); mm.fill();
-      mm.restore();
-    },
-  };
+  function setWanted(stars) {
+    if (!starsEl) return;
+    starsEl.textContent = '★'.repeat(stars) + '☆'.repeat(Math.max(0, 5 - stars));
+    starsEl.style.color = stars >= 3 ? '#ff5a4a' : '#ffd94a';
+  }
+
+  function setClock(text, night) {
+    if (clockEl) {
+      clockEl.textContent = text;
+      clockEl.style.color = night ? '#9db8e8' : '#ffffff';
+    }
+  }
+
+  function setMission(text) {
+    if (missionEl) missionEl.textContent = text;
+  }
+
+  function toast(text, ms) {
+    if (!toastEl) return;
+    toastEl.textContent = text;
+    toastEl.style.opacity = '1';
+    toastTimer = ms ?? 2600;
+  }
+
+  function update(dt) {
+    if (toastTimer > 0) {
+      toastTimer -= dt * 1000;
+      if (toastTimer <= 0 && toastEl) toastEl.style.opacity = '0';
+    }
+  }
+
+  function drawMinimap(playerPos, target, policePos, carPos) {
+    if (!mapCtx || !minimap) return;
+    const s = minimap.width;
+    const scale = s / WORLD.size;
+    const toMap = (x, z) => [(x + WORLD.half) * scale, (z + WORLD.half) * scale];
+    mapCtx.fillStyle = 'rgba(10, 16, 26, 0.82)';
+    mapCtx.fillRect(0, 0, s, s);
+    // District tints.
+    for (const d of DISTRICTS) {
+      if (d.ring) continue;
+      const [x, y] = toMap(d.x - d.w / 2, d.z - d.h / 2);
+      mapCtx.fillStyle = `#${d.color.toString(16).padStart(6, '0')}55`;
+      mapCtx.fillRect(x, y, d.w * scale, d.h * scale);
+    }
+    // Roads.
+    mapCtx.strokeStyle = '#5a6068';
+    mapCtx.lineWidth = 1;
+    for (let c = -WORLD.half; c <= WORLD.half; c += WORLD.roadGap) {
+      const [x1] = toMap(c, 0);
+      const [, y1] = toMap(0, c);
+      mapCtx.beginPath(); mapCtx.moveTo(x1, 0); mapCtx.lineTo(x1, s); mapCtx.stroke();
+      mapCtx.beginPath(); mapCtx.moveTo(0, y1); mapCtx.lineTo(s, y1); mapCtx.stroke();
+    }
+    // Mission target.
+    if (target) {
+      const [x, y] = toMap(target.x, target.z);
+      mapCtx.fillStyle = '#ffd94a';
+      mapCtx.beginPath(); mapCtx.arc(x, y, 5, 0, Math.PI * 2); mapCtx.fill();
+      mapCtx.strokeStyle = '#ffd94a';
+      mapCtx.beginPath(); mapCtx.arc(x, y, 9, 0, Math.PI * 2); mapCtx.stroke();
+    }
+    // Police.
+    mapCtx.fillStyle = '#4a7dff';
+    for (const p of policePos || []) {
+      const [x, y] = toMap(p.x, p.z);
+      mapCtx.fillRect(x - 2, y - 2, 4, 4);
+    }
+    // The player's car.
+    if (carPos) {
+      const [x, y] = toMap(carPos.x, carPos.z);
+      mapCtx.fillStyle = '#7dff8a';
+      mapCtx.fillRect(x - 2, y - 2, 4, 4);
+    }
+    // The player: a white dot with a direction tick.
+    const [px, py] = toMap(playerPos.x, playerPos.z);
+    mapCtx.fillStyle = '#ffffff';
+    mapCtx.beginPath(); mapCtx.arc(px, py, 3.5, 0, Math.PI * 2); mapCtx.fill();
+  }
+
+  return { setHealth, setMoney, setWanted, setClock, setMission, toast, update, drawMinimap };
 }

@@ -1,98 +1,88 @@
-// Wanted level 1-5, police pursuit, arrest, losing the cops.
+// Vice Bay: Blood & Destiny — wanted level and police pursuit.
+// Heat rises with crimes and cools with time; each wanted star keeps one police car
+// hunting the player, and the chase gets faster and closer as the heat climbs.
 
-export function createPolice(scene, city, vehicles, audio, onBusted) {
-  const pursuit = [];
-  let wanted = 0;
+import { WANTED } from './config.js';
+import { createVehicle } from './vehicles.js';
+import { VEHICLES } from './config.js';
+
+const THREE = globalThis.THREE;
+
+export function createPolice(scene, colliders, rand) {
+  const cruisers = [];
   let heat = 0;
-  let loseTimer = 0;
-  let arrestTimer = 0;
-  let flash = 0;
+  let stars = 0;
+  const policeType = { name: 'Police Cruiser', color: 0x1c2733, top: 32, accel: 20, turn: 2.4, price: 0 };
 
-  function spawnPursuit(x, z) {
-    const car = vehicles.spawn('police', x, z, 0);
-    car.driver = 'police';
-    car.cruise = 30;
-    pursuit.push(car);
-    return car;
+  function addCrime(amount) {
+    heat = Math.min(WANTED.max, heat + (amount ?? WANTED.heatPerCrime));
   }
 
-  function setWanted(n) {
-    const prev = wanted;
-    wanted = Math.max(0, Math.min(5, n));
-    if (wanted > prev) {
-      heat = 100;
-      loseTimer = 0;
-      audio.sting();
-      // Spawn pursuit cars at the city edge.
-      const need = wanted - pursuit.length;
-      for (let i = 0; i < need; i++) {
-        const a = Math.random() * Math.PI * 2;
-        spawnPursuit(Math.cos(a) * 600, Math.sin(a) * 600);
+  function wantedStars() {
+    return Math.max(0, Math.min(WANTED.max, Math.floor(heat)));
+  }
+
+  function spawnCruiser(x, z) {
+    const v = createVehicle(scene, policeType, x, z, rand.angle());
+    // A light bar on the roof so a cruiser reads at a glance.
+    const bar = new THREE.Mesh(
+      new THREE.BoxGeometry(1.1, 0.18, 0.4),
+      new THREE.MeshBasicMaterial({ color: 0x2244ff }),
+    );
+    bar.position.set(0, 1.45, -0.2);
+    v.group.add(bar);
+    cruisers.push(v);
+    return v;
+  }
+
+  function update(dt, playerPos, playerSpeed) {
+    heat = Math.max(0, heat - WANTED.decayPerSecond * dt);
+    const want = wantedStars();
+    stars = want;
+    const need = want * WANTED.policePerStar;
+    while (cruisers.length < need) {
+      const a = rand.angle();
+      spawnCruiser(playerPos.x + Math.cos(a) * 90, playerPos.z + Math.sin(a) * 90);
+    }
+    while (cruisers.length > need) {
+      const v = cruisers.pop();
+      scene.remove(v.group);
+    }
+    for (const c of cruisers) {
+      // Simple pursuit: steer toward the player, faster when close.
+      const dx = playerPos.x - c.position.x;
+      const dz = playerPos.z - c.position.z;
+      const dist = Math.hypot(dx, dz) || 1;
+      const wantHeading = Math.atan2(dx, dz);
+      let dh = wantHeading - c.heading;
+      while (dh > Math.PI) dh -= Math.PI * 2;
+      while (dh < -Math.PI) dh += Math.PI * 2;
+      const steer = Math.max(-1, Math.min(1, dh * 1.5));
+      const input = {
+        forward: dist > 6,
+        back: false,
+        left: steer > 0.15,
+        right: steer < -0.15,
+      };
+      c.update(dt, input, colliders);
+      // A cruiser that rams the player at speed is a bust.
+      if (dist < 3.2 && Math.abs(c.speed) > 6) {
+        c.stop();
       }
     }
-    return wanted;
+  }
+
+  function reset() {
+    heat = 0;
+    stars = 0;
+    for (const c of cruisers) scene.remove(c.group);
+    cruisers.length = 0;
   }
 
   return {
-    get wanted() { return wanted; },
-    get flash() { return flash; },
-    addHeat(n) { setWanted(wanted + n); },
-    clear() { setWanted(0); },
-    update(dt, playerPos, playerInCar, playerSpeed) {
-      flash = (flash + dt * 6) % 2;
-      if (wanted === 0) {
-        // Despawn leftover pursuit cars.
-        for (const car of pursuit.splice(0)) {
-          car.speed = 0;
-          scene.remove(car.mesh);
-          const i = vehicles.list.indexOf(car);
-          if (i >= 0) vehicles.list.splice(i, 1);
-        }
-        return;
-      }
-      // Heat decays when the player is far and slow.
-      const dist = Math.hypot(playerPos.x, playerPos.z);
-      heat -= dt * (playerSpeed > 20 ? 0.5 : 4);
-      if (heat <= 0) {
-        loseTimer += dt;
-        if (loseTimer > 5) setWanted(0);
-      } else loseTimer = 0;
-
-      for (const car of pursuit) {
-        // Steer toward the player's predicted position.
-        const px = playerPos.x + Math.sin(0) * 0;
-        const pz = playerPos.z;
-        const dx = px - car.pos.x, dz = pz - car.pos.z;
-        const targetHeading = Math.atan2(dx, dz);
-        let diff = targetHeading - car.heading;
-        while (diff > Math.PI) diff -= Math.PI * 2;
-        while (diff < -Math.PI) diff += Math.PI * 2;
-        car.heading += Math.max(-1.6 * dt, Math.min(1.6 * dt, diff));
-        car.speed += ((24 + wanted * 3) - car.speed) * Math.min(1, dt * 1.5);
-        car.pos.x += Math.sin(car.heading) * car.speed * dt;
-        car.pos.z += Math.cos(car.heading) * car.speed * dt;
-        car.mesh.rotation.y = car.heading;
-        for (const w of car.wheels) w.rotation.x += car.speed * dt * 2;
-        // Flashing light bar.
-        if (car.mesh.userData.lightBar) {
-          car.mesh.userData.lightBar.material.color.setHex(flash < 1 ? 0x2244ff : 0xff2222);
-        }
-        // Arrest: on foot and a cop gets close.
-        const d = Math.hypot(car.pos.x - playerPos.x, car.pos.z - playerPos.z);
-        if (!playerInCar && d < 4) {
-          arrestTimer += dt;
-          if (arrestTimer > 2) {
-            arrestTimer = 0;
-            setWanted(0);
-            onBusted();
-          }
-        }
-        // Ram the player's car.
-        if (playerInCar && d < 3.5) {
-          car.speed *= 0.5;
-        }
-      }
-      audio.setSiren(wanted > 0);
-    },
+    update, addCrime, reset,
+    get heat() { return heat; },
+    get stars() { return stars; },
+    get cruisers() { return cruisers; },
   };
 }
