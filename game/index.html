@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vice Bay: Blood &amp; Destiny</title>
+<style>
+  html, body { margin: 0; padding: 0; overflow: hidden; background: #0a0e16; height: 100%; font-family: Arial, Helvetica, sans-serif; }
+  #game { display: block; width: 100vw; height: 100vh; }
+  #hud { position: fixed; inset: 0; pointer-events: none; color: #fff; opacity: 0; transition: opacity 0.3s; z-index: 5; }
+  #hud.on { opacity: 1; }
+  #health-wrap { position: absolute; top: 16px; left: 16px; width: 220px; }
+  #health-bar { width: 100%; height: 14px; background: rgba(0,0,0,0.55); border: 1px solid #fff3; border-radius: 7px; overflow: hidden; }
+  #health { height: 100%; width: 100%; background: linear-gradient(90deg, #22c55e, #84cc16); }
+  #money, #rep { font-size: 20px; font-weight: bold; text-shadow: 1px 1px 2px #000; margin-top: 4px; }
+  #stars { position: absolute; top: 14px; right: 16px; font-size: 30px; letter-spacing: 3px; color: #ffd700; text-shadow: 1px 1px 3px #000; }
+  #stars.hot { animation: blink 0.7s infinite alternate; }
+  @keyframes blink { from { opacity: 1; } to { opacity: 0.45; } }
+  #speed { position: absolute; bottom: 18px; right: 18px; font-size: 24px; font-weight: bold; text-shadow: 1px 1px 2px #000; }
+  #objective { position: absolute; top: 16px; left: 50%; transform: translateX(-50%); font-size: 17px; background: rgba(0,0,0,0.55); padding: 8px 16px; border-radius: 8px; }
+  #compass { position: absolute; top: 60px; left: 50%; transform: translateX(-50%); font-size: 15px; color: #ffd27f; text-shadow: 1px 1px 2px #000; }
+  #flash { position: absolute; top: 22%; left: 50%; transform: translateX(-50%); font-size: 26px; font-weight: bold; color: #ffe066; text-shadow: 2px 2px 4px #000; opacity: 0; transition: opacity 0.4s; text-align: center; }
+  #radio { position: absolute; bottom: 18px; left: 18px; font-size: 14px; color: #9fd8ff; text-shadow: 1px 1px 2px #000; }
+  #minimap { position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%); width: 180px; height: 180px; border: 2px solid rgba(255,255,255,0.4); border-radius: 8px; }
+  .overlay { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(5,8,16,0.72); color: #fff; z-index: 10; }
+  .overlay h1 { font-size: 52px; margin: 0 0 8px; letter-spacing: 4px; color: #ff2f5e; text-shadow: 0 0 24px rgba(255,47,94,0.7); }
+  .overlay h2 { font-size: 20px; margin: 0 0 28px; font-weight: normal; color: #ffd27f; }
+  .overlay button { pointer-events: auto; font-size: 19px; padding: 12px 34px; margin: 6px; background: #ff2f5e; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
+  .overlay button:hover { background: #e0244e; }
+  .overlay button.secondary { background: #2b3a55; }
+  #menu, #pause, #garage { display: none; }
+  #menu-list, #garage-list { max-height: 55vh; overflow-y: auto; width: 520px; background: rgba(0,0,0,0.6); border-radius: 10px; padding: 12px 18px; }
+  .menu-row { display: flex; justify-content: space-between; padding: 7px 4px; border-bottom: 1px solid rgba(255,255,255,0.12); font-size: 15px; cursor: pointer; }
+  .menu-head { padding: 10px 4px 4px; font-size: 15px; color: #f0a832; letter-spacing: 1px; }
+  .menu-row b { color: #ffe066; }
+  .menu-row span { color: #cbd5e1; text-align: right; max-width: 320px; }
+  .hint { margin-top: 22px; font-size: 13px; color: #94a3b8; line-height: 1.7; text-align: center; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="hud">
+  <div id="health-wrap"><div id="health-bar"><div id="health"></div></div><div id="money">$1,000</div><div id="rep">REP 0</div></div>
+  <div id="stars">☆☆☆☆☆</div>
+  <div id="objective"></div>
+  <div id="compass">N</div>
+  <div id="flash"></div>
+  <div id="radio">RADIO: OFF</div>
+  <div id="speed">0 km/h</div>
+  <canvas id="minimap" width="180" height="180"></canvas>
+</div>
+<div id="title" class="overlay">
+  <h1>VICE BAY</h1>
+  <h2>BLOOD &amp; DESTINY</h2>
+  <button id="btn-new">NEW GAME</button>
+  <button id="btn-continue" class="secondary">CONTINUE</button>
+  <button id="btn-mute" class="secondary">MUTE</button>
+  <div class="hint">WASD move / drive · Shift run · Space handbrake / jump · E enter, exit, steal car<br>Mouse drag camera · Click shoot · 1-5 weapons · R reload · Q radio<br>M missions · G garage · P pause · F1 taxi · F2 race · F3 time trial · F4 police escape</div>
+</div>
+<div id="menu" class="overlay">
+  <h1 style="font-size:34px">MISSIONS</h1>
+  <div id="menu-list"></div>
+  <div class="hint">Press M or Escape to close</div>
+</div>
+<div id="pause" class="overlay">
+  <h1 style="font-size:34px">PAUSED</h1>
+  <div class="hint">Press P to resume</div>
+</div>
+<div id="garage" class="overlay">
+  <h1 style="font-size:34px">GARAGE</h1>
+  <div id="garage-list"></div>
+  <button id="btn-garage-close" class="secondary">CLOSE</button>
+</div>
+<script src="vendor/three.min.js"></script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
