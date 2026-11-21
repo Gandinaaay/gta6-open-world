@@ -1,22 +1,18 @@
 [
   {
-    "description": "Rico on foot in Downtown at dawn, the Vice Tower behind him, first mission 'Fresh Off the Boat' on the HUD with minimap.",
-    "file": "1-start.jpg",
-    "title": "Dawn in Downtown"
+    "query": "?shot=start&seed=1",
+    "name": "1-start.jpg"
   },
   {
-    "description": "Rico driving the red Vice Sedan through Downtown in the morning, HUD with money, health, clock and mission objective.",
-    "file": "2-play.jpg",
-    "title": "Driving the Vice Sedan"
+    "query": "?shot=play&seed=1",
+    "name": "2-play.jpg"
   },
   {
-    "description": "A three-star wanted level in the afternoon: police interceptors on the tail of Rico's purple Blood Muscle.",
-    "file": "3-chase.jpg",
-    "title": "Three-star chase"
+    "query": "?shot=chase&seed=1",
+    "name": "3-chase.jpg"
   },
   {
-    "description": "The city skyline at night with lit windows, street lamps and the beach, Rico on foot at Beachfront.",
-    "file": "4-night.jpg",
-    "title": "Vice Bay at night"
+    "query": "?shot=night&seed=1",
+    "name": "4-night.jpg"
   }
 ]

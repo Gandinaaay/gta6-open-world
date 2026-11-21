@@ -1,64 +1,39 @@
-// Keyboard + mouse input for Vice Bay. WASD move/drive, mouse orbits the
-// camera, E interacts, F punches, click shoots, G garage, H horn, P pause.
+// Keyboard + mouse input. `pressed` holds keys hit since the last frame
+// (edge-triggered); main.js clears it every frame. Every key is stored
+// lowercased, so 'Escape' and 'Shift' match the lowercase checks in the game.
 
-export function createInput(G) {
-  const input = {
-    keys: new Set(),
-    prevKeys: new Set(),
-    mouseDX: 0,
-    mouseDY: 0,
-    clicked: false,
-    clickX: 0,
-    clickY: 0,
-    locked: false,
+export function createInput() {
+  const keys = new Set();
+  const pressed = new Set();
+  const mouse = { dx: 0, dy: 0, down: false, x: 0, y: 0 };
+  let enabled = true;
+
+  const down = (e) => {
+    if (!enabled) return;
+    const k = e.key.toLowerCase();
+    if (!keys.has(k)) pressed.add(k);
+    keys.add(k);
+    if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   };
-  const GAME_KEYS = new Set([
-    'KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft', 'ShiftRight',
-    'KeyE', 'KeyF', 'KeyG', 'KeyH', 'KeyM', 'KeyP', 'KeyR', 'ArrowUp',
-    'ArrowDown', 'ArrowLeft', 'ArrowRight',
-  ]);
-  window.addEventListener('keydown', (e) => {
-    if (GAME_KEYS.has(e.code)) e.preventDefault();
-    if (e.code === 'KeyP' && !e.repeat) G.paused = !G.paused;
-    input.keys.add(e.code);
-  });
-  window.addEventListener('keyup', (e) => input.keys.delete(e.code));
-  window.addEventListener('blur', () => input.keys.clear());
-  const canvasHost = document.getElementById('app');
-  canvasHost.addEventListener('mousedown', (e) => {
-    input.clicked = true;
-    input.clickX = e.clientX;
-    input.clickY = e.clientY;
-  });
-  window.addEventListener('mouseup', () => { input.clicked = false; });
-  window.addEventListener('mousemove', (e) => {
-    if (e.buttons & 1) {
-      input.mouseDX += e.movementX || 0;
-      input.mouseDY += e.movementY || 0;
-    }
-  });
-  // touch: left half = move stick (simple), right half drag = camera
-  let touchStart = null;
-  canvasHost.addEventListener('touchstart', (e) => {
-    touchStart = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  }, { passive: true });
-  canvasHost.addEventListener('touchmove', (e) => {
-    if (!touchStart) return;
-    const t = e.touches[0];
-    input.mouseDX += (t.clientX - touchStart.x) * 0.6;
-    input.mouseDY += (t.clientY - touchStart.y) * 0.6;
-    touchStart = { x: t.clientX, y: t.clientY };
-  }, { passive: true });
-  G.input = input;
-  return input;
-}
+  const up = (e) => { keys.delete(e.key.toLowerCase()); };
+  const move = (e) => { mouse.dx += e.movementX || 0; mouse.dy += e.movementY || 0; mouse.x = e.clientX; mouse.y = e.clientY; };
+  const mdown = (e) => { mouse.down = true; mouse.x = e.clientX; mouse.y = e.clientY; };
+  const mup = () => { mouse.down = false; };
 
-// Edge-triggered key: true only on the frame the key goes down.
-// Call endFrameInput(G) once per frame after all systems update.
-export function pressed(G, code) {
-  return G.input.keys.has(code) && !G.input.prevKeys.has(code);
-}
+  window.addEventListener('keydown', down);
+  window.addEventListener('keyup', up);
+  window.addEventListener('mousemove', move);
+  window.addEventListener('mousedown', mdown);
+  window.addEventListener('mouseup', mup);
 
-export function endFrameInput(G) {
-  G.input.prevKeys = new Set(G.input.keys);
+  return {
+    keys, pressed, mouse,
+    is(k) { return keys.has(k); },
+    wasPressed(k) { return pressed.has(k); },
+    endFrame() { pressed.clear(); mouse.dx = 0; mouse.dy = 0; },
+    setEnabled(v) { enabled = v; },
+    // Test helpers: simulate a key press without a real keyboard.
+    press(k) { if (!keys.has(k)) pressed.add(k); keys.add(k); },
+    release(k) { keys.delete(k); },
+  };
 }

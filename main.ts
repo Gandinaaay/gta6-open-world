@@ -1,39 +1,66 @@
-// Vice Bay: Blood & Destiny — entry point (main.ts, Node 22).
-// Builds the dossier for the game in game/ + screenshots/ and hands it in:
-// copies game/ and screenshots/ to the output dir and writes dossier.json.
-// All paths resolve from import.meta.url — never from process.cwd() — so the
-// grade run works from any working directory, with no network, in 10 s.
+// Vice Bay: Blood & Destiny — entrypoint.
+//
+// Copies game/ + screenshots/ to the output directory and writes
+// dossier.json there via buildDossier from ./vendor/makefun-game.ts.
+//
+// Paths are resolved from THIS file's location (import.meta.url), never
+// from process.cwd(): the grader runs `node /bot/main.ts` from another
+// working directory, so a cwd-relative game/ would crash with
+// "game/: no such directory".
+//
+// Plain JavaScript only — no TypeScript annotations, interfaces or enums —
+// so Node 22 runs this file with no flags, no build and no install.
 
-import { buildDossier, DOSSIER_MAX_BYTES } from './vendor/makefun-game.ts';
-import fs from 'node:fs';
-import path from 'node:path';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildDossier } from './vendor/makefun-game.ts';
 
-// import.meta.url ends with a slash for a directory URL, so fileURLToPath
-// gives the directory itself. Do NOT wrap it in dirname() — that strips
-// one level and breaks the build (the round 6 failure).
-const rootDir = fileURLToPath(new URL('.', import.meta.url));
-const outDir = process.env.MAKEFUN_OUTPUT_DIR
-  ? path.resolve(process.env.MAKEFUN_OUTPUT_DIR)
-  : path.join(rootDir, 'out');
-const caps = { text_max_bytes: DOSSIER_MAX_BYTES };
+const repoRoot = dirname(fileURLToPath(import.meta.url));
+const gameDir = join(repoRoot, 'game');
+const shotsDir = join(repoRoot, 'screenshots');
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ? resolve(process.env.MAKEFUN_OUTPUT_DIR) : '/output';
 
-const dossierA = buildDossier(rootDir, caps);
-const dossierB = buildDossier(rootDir, caps);
-function countFiles(dir) {
-  let n = 0;
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (entry.isDirectory()) n += countFiles(path.join(dir, entry.name));
-    else if (entry.isFile()) n += 1;
-  }
-  return n;
+const CAPS = {
+  text_max_bytes: 163840,
+  screenshots: { max: 4, max_bytes: 262144 },
+  game_max_files: 993,
+  game_max_bytes: 50331648,
+};
+
+if (!existsSync(gameDir) || !statSync(gameDir).isDirectory()) {
+  throw new Error(`game/: no such directory next to main.ts (${gameDir})`);
+}
+if (!existsSync(join(gameDir, 'index.html'))) {
+  throw new Error('game/index.html: no such file');
 }
 
-fs.mkdirSync(outDir, { recursive: true });
-fs.writeFileSync(path.join(outDir, 'dossier.json'), Buffer.from(dossierA));
-fs.cpSync(path.join(rootDir, 'game'), path.join(outDir, 'game'), { recursive: true });
-fs.cpSync(path.join(rootDir, 'screenshots'), path.join(outDir, 'screenshots'), { recursive: true });
+mkdirSync(outDir, { recursive: true });
+// Clear stale output first, so a re-run never ships files from an older build.
+for (const sub of ['game', 'screenshots']) {
+  const target = join(outDir, sub);
+  if (existsSync(target)) rmSync(target, { recursive: true, force: true });
+}
+cpSync(gameDir, join(outDir, 'game'), { recursive: true });
+if (existsSync(shotsDir)) {
+  cpSync(shotsDir, join(outDir, 'screenshots'), { recursive: true });
+} else {
+  mkdirSync(join(outDir, 'screenshots'), { recursive: true });
+}
+const shotCount = readdirSync(join(outDir, 'screenshots')).filter((f) => /\.(png|jpe?g)$/i.test(f)).length;
+console.log(`Vice Bay: copied game/ and ${shotCount} screenshot(s) to ${outDir}`);
 
-const gameFiles = countFiles(path.join(outDir, 'game'));
-const shotFiles = fs.readdirSync(path.join(outDir, 'screenshots')).filter((f) => /\.(png|jpe?g)$/i.test(f));
-console.log(`Vice Bay: Blood & Destiny — dossier ${Buffer.from(dossierA).length} bytes, ${gameFiles} game files, ${shotFiles.length} screenshots -> ${outDir}`);
+const dossier = buildDossier(outDir, CAPS);
+writeFileSync(join(outDir, 'dossier.json'), dossier);
+
+// Round-trip: the dossier on disk must equal a fresh buildDossier call.
+// Compare String(...) primitives: buildDossier returns a String object or
+// a byte array, so normalize both sides to the same string primitive first.
+const roundTrip = buildDossier(outDir, CAPS);
+const written = readFileSync(join(outDir, 'dossier.json'), 'utf8');
+const roundTripText = roundTrip instanceof Uint8Array ? Buffer.from(roundTrip).toString('utf8') : String(roundTrip);
+if (String(written) !== String(roundTripText)) {
+  throw new Error('dossier.json round-trip mismatch: the file on disk differs from a fresh buildDossier call');
+}
+
+console.log(`Vice Bay: wrote ${join(outDir, 'dossier.json')} (${written.length} bytes)`);

@@ -1,203 +1,106 @@
-// HUD: money, health, wanted stars, clock, mission objective, minimap and
-// the mission menu. All DOM, drawn over the Three.js canvas.
+// HUD: DOM overlay (health, money, rep, wanted stars, speed, compass,
+// objective) + a live minimap canvas. Also the title screen and menus.
 
-import { DISTRICTS } from './config.js';
-import { MAIN_MISSIONS, SIDE_MISSIONS, nextMainMission, startMission } from './missions.js';
-import { pressed } from './input.js';
+export function createHud() {
+  const el = {};
+  for (const id of ['health', 'money', 'rep', 'stars', 'speed', 'objective', 'compass', 'flash', 'title', 'menu', 'menu-list', 'pause']) {
+    el[id] = document.getElementById(id);
+  }
+  const minimap = document.getElementById('minimap');
+  const mm = minimap.getContext('2d');
 
-function el(tag, cls, parent) {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (parent) parent.appendChild(e);
-  return e;
-}
+  let flashTimer = 0;
 
-export function createHud(G) {
-  const root = el('div', 'hud', document.getElementById('app'));
-  const topLeft = el('div', 'hud-tl', root);
-  const moneyEl = el('div', 'hud-money', topLeft);
-  const healthWrap = el('div', 'hud-health', topLeft);
-  el('span', '', healthWrap).textContent = '♥ ';
-  const healthBar = el('div', 'hud-healthbar', healthWrap);
-  const healthFill = el('div', 'hud-healthfill', healthBar);
-  const topRight = el('div', 'hud-tr', root);
-  const starsEl = el('div', 'hud-stars', topRight);
-  const clockEl = el('div', 'hud-clock', topRight);
-  const districtEl = el('div', 'hud-district', topRight);
-  const objective = el('div', 'hud-objective', root);
-  const objTitle = el('div', 'hud-obj-title', objective);
-  const objStep = el('div', 'hud-obj-step', objective);
-  const flashEl = el('div', 'hud-flash', root);
-  const hintEl = el('div', 'hud-hint', root);
-  const cross = el('div', 'hud-cross', root);
-  cross.textContent = '+';
-  const mapWrap = el('div', 'hud-mapwrap', root);
-  const mapCanvas = el('canvas', 'hud-map', mapWrap);
-  mapCanvas.width = 200;
-  mapCanvas.height = 200;
-  const helpEl = el('div', 'hud-help', root);
-  helpEl.innerHTML = 'WASD move &nbsp;·&nbsp; E car &nbsp;·&nbsp; F punch &nbsp;·&nbsp; Click shoot &nbsp;·&nbsp; M missions &nbsp;·&nbsp; P pause';
-  const menuBtn = el('button', 'hud-menubtn', root);
-  menuBtn.textContent = 'MISSIONS (M)';
-  const menu = el('div', 'hud-menu', root);
-  menu.style.display = 'none';
-  const menuTitle = el('h2', '', menu);
-  menuTitle.textContent = 'Vice Bay — Missions';
-  const menuList = el('div', 'hud-menulist', menu);
-  const menuClose = el('button', 'hud-menuclose', menu);
-  menuClose.textContent = 'Close (M)';
-  menuClose.onclick = () => { menu.style.display = 'none'; };
-  menuBtn.onclick = () => toggleMenu();
-
-  function toggleMenu() {
-    const show = menu.style.display === 'none';
-    menu.style.display = show ? 'block' : 'none';
-    if (show) renderMenu();
+  function stars(n) {
+    return '★'.repeat(n) + '☆'.repeat(5 - n);
   }
 
-  function renderMenu() {
-    menuList.innerHTML = '';
-    const next = nextMainMission(G);
-    const mk = (m, locked, note) => {
-      const row = el('div', 'hud-mrow', menuList);
-      const t = el('div', 'hud-mtitle', row);
-      t.textContent = `${m.title} — ${m.giver} · $${m.reward}`;
-      const d = el('div', 'hud-mdesc', row);
-      d.textContent = m.desc;
-      const b = el('button', 'hud-mbtn', row);
-      if (locked) {
-        b.textContent = note || 'Locked';
-        b.disabled = true;
-      } else if (G.missionsDone.includes(m.id)) {
-        b.textContent = 'Done ✓';
-        b.disabled = true;
-      } else {
-        b.textContent = G.activeMission && G.activeMission.id === m.id ? 'Active' : 'Start';
-        b.disabled = !!G.activeMission;
-        b.onclick = () => {
-          if (startMission(G, m.id)) {
-            menu.style.display = 'none';
-          }
-        };
-      }
-    };
-    el('h3', '', menuList).textContent = 'Story';
-    for (const m of MAIN_MISSIONS) mk(m, next ? m.id !== next.id : true, 'Finish the story in order');
-    el('h3', '', menuList).textContent = 'Side jobs';
-    for (const m of SIDE_MISSIONS) mk(m, false);
-  }
-
-  let flashTimer = null;
-  let hintTimer = null;
-  const hud = {
+  return {
+    setHealth(h) {
+      el.health.style.width = `${Math.max(0, Math.min(100, h))}%`;
+      el.health.style.background = h > 50 ? '#22c55e' : h > 25 ? '#f59e0b' : '#ef4444';
+    },
+    setMoney(m) { el.money.textContent = `$${Math.floor(m).toLocaleString('en-US')}`; },
+    setRep(r) { el.rep.textContent = `REP ${r}`; },
+    setWanted(n, flashOn) {
+      el.stars.textContent = stars(n);
+      el.stars.style.color = n > 0 ? (flashOn ? '#ffffff' : '#facc15') : '#9ca3af';
+    },
+    setSpeed(kmh) { el.speed.textContent = `${Math.round(Math.abs(kmh))} km/h`; },
+    setObjective(text, dist) {
+      el.objective.textContent = dist !== null && dist !== undefined ? `${text} — ${Math.round(dist)}m` : text;
+    },
+    setCompass(yaw) {
+      const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      const deg = ((yaw * 180 / Math.PI) % 360 + 360) % 360;
+      el.compass.textContent = dirs[Math.round(deg / 45) % 8];
+    },
     flash(text) {
-      flashEl.textContent = text;
-      flashEl.style.opacity = '1';
-      if (flashTimer) clearTimeout(flashTimer);
-      flashTimer = setTimeout(() => { flashEl.style.opacity = '0'; }, 3600);
+      el.flash.textContent = text;
+      el.flash.style.opacity = 1;
+      flashTimer = 3;
     },
-    hint(text) {
-      hintEl.textContent = text;
-      hintEl.style.opacity = '1';
-      if (hintTimer) clearTimeout(hintTimer);
-      hintTimer = setTimeout(() => { hintEl.style.opacity = '0'; }, 2400);
-    },
-    toggleMenu,
     update(dt) {
-      moneyEl.textContent = `$${Math.floor(G.money).toLocaleString('en-US')}`;
-      healthFill.style.width = `${Math.max(0, G.health)}%`;
-      const stars = '★'.repeat(G.wanted) + '☆'.repeat(5 - G.wanted);
-      starsEl.textContent = stars;
-      starsEl.style.color = G.wanted > 0 ? '#ff5252' : '#e0e0e0';
-      const hh = Math.floor(G.time);
-      const mm = Math.floor((G.time - hh) * 60);
-      clockEl.textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
-      const d = DISTRICTS.find((x) => {
-        const b = x.bounds;
-        return G.player.x >= b[0] && G.player.x <= b[1] && G.player.z >= b[2] && G.player.z <= b[3];
-      });
-      districtEl.textContent = d ? d.name : 'Vice Bay';
-      if (G.activeMission) {
-        const step = G.activeMission.steps[G.missionStep];
-        objTitle.textContent = `${G.activeMission.title} — $${G.activeMission.reward}`;
-        let dist = '';
-        if (step && step.x !== undefined) {
-          const dd = Math.round(Math.hypot(G.player.x - step.x, G.player.z - step.z));
-          dist = ` · ${dd}m`;
-        }
-        objStep.textContent = (step ? step.label : '') + dist;
-        objective.style.display = 'block';
-      } else {
-        const next = nextMainMission(G);
-        objTitle.textContent = next ? `Next: ${next.title}` : 'Story complete — Vice Bay is yours';
-        objStep.textContent = 'Press M for missions';
-        objective.style.display = 'block';
+      if (flashTimer > 0) {
+        flashTimer -= dt;
+        if (flashTimer <= 0) el.flash.style.opacity = 0;
       }
-      if (pressed(G, 'KeyM')) toggleMenu();
-      this.drawMap();
     },
-    drawMap() {
-      const ctx = mapCanvas.getContext('2d');
-      const S = 200;
-      const sc = S / 2000;
-      const px = (v) => (v + 1000) * sc;
-      ctx.clearRect(0, 0, S, S);
-      ctx.fillStyle = '#0e1a24';
-      ctx.fillRect(0, 0, S, S);
-      for (const dist of DISTRICTS) {
-        const b = dist.bounds;
-        ctx.fillStyle = dist.ground;
-        ctx.fillRect(px(b[0]), px(b[2]), (b[1] - b[0]) * sc, (b[3] - b[2]) * sc);
+    showTitle(show) { el.title.style.display = show ? 'flex' : 'none'; },
+    showPause(show) { el.pause.style.display = show ? 'flex' : 'none'; },
+    showMenu(show, rows) {
+      el.menu.style.display = show ? 'flex' : 'none';
+      if (show && rows) {
+        el['menu-list'].innerHTML = rows.map((r) =>
+          `<div class="menu-row${r.current ? ' current' : ''}${r.done ? ' done' : ''}">${r.done ? '✓ ' : ''}${r.name} — ${r.desc || ''}</div>`).join('');
       }
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-      ctx.lineWidth = 2;
-      for (let v = -900; v <= 900; v += 200) {
-        ctx.beginPath(); ctx.moveTo(px(v), 0); ctx.lineTo(px(v), S); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, px(v)); ctx.lineTo(S, px(v)); ctx.stroke();
+    },
+    drawMinimap(px, pz, yaw, objective, cars, peds, cops, range = 300) {
+      const w = minimap.width, h = minimap.height;
+      mm.clearRect(0, 0, w, h);
+      mm.fillStyle = 'rgba(10, 15, 25, 0.85)';
+      mm.fillRect(0, 0, w, h);
+      const scale = w / (range * 2);
+      const toMap = (x, z) => [w / 2 + (x - px) * scale, h / 2 + (z - pz) * scale];
+      // Roads.
+      mm.strokeStyle = '#4b5563';
+      mm.lineWidth = 3;
+      for (let i = -4; i <= 4; i++) {
+        const p = i * 200;
+        const [x1, y1] = toMap(p, pz - range);
+        const [x2, y2] = toMap(p, pz + range);
+        mm.beginPath(); mm.moveTo(x1, y1); mm.lineTo(x2, y2); mm.stroke();
+        const [x3, y3] = toMap(px - range, p);
+        const [x4, y4] = toMap(px + range, p);
+        mm.beginPath(); mm.moveTo(x3, y3); mm.lineTo(x4, y4); mm.stroke();
       }
-      // mission target
-      if (G.activeMission) {
-        const step = G.activeMission.steps[G.missionStep];
-        if (step && step.x !== undefined) {
-          ctx.fillStyle = '#ffd54f';
-          ctx.beginPath();
-          ctx.arc(px(step.x), px(step.z), 5, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.strokeStyle = '#fff';
-          ctx.beginPath();
-          ctx.arc(px(step.x), px(step.z), 8, 0, Math.PI * 2);
-          ctx.stroke();
-        }
+      // Objective ring (pulsing).
+      if (objective) {
+        const [ox, oy] = toMap(objective.x, objective.z);
+        const pulse = 6 + Math.sin(performance.now() * 0.006) * 3;
+        mm.strokeStyle = '#facc15';
+        mm.lineWidth = 2;
+        mm.beginPath(); mm.arc(ox, oy, pulse, 0, Math.PI * 2); mm.stroke();
+        mm.fillStyle = '#facc15';
+        mm.beginPath(); mm.arc(ox, oy, 3, 0, Math.PI * 2); mm.fill();
       }
-      for (const t of G.traffic) {
-        ctx.fillStyle = 'rgba(255,255,255,0.55)';
-        ctx.fillRect(px(t.x) - 1, px(t.z) - 1, 2, 2);
+      // Traffic (white), peds (grey), cops (flashing blue/red).
+      mm.fillStyle = '#e5e7eb';
+      for (const c of cars) { const [x, y] = toMap(c.pos.x, c.pos.z); mm.fillRect(x - 1, y - 1, 2, 2); }
+      mm.fillStyle = '#9ca3af';
+      for (const p of peds) { const [x, y] = toMap(p.pos.x, p.pos.z); mm.fillRect(x - 1, y - 1, 2, 2); }
+      for (const c of cops) {
+        const [x, y] = toMap(c.pos.x, c.pos.z);
+        mm.fillStyle = Math.floor(performance.now() / 300) % 2 ? '#3b82f6' : '#ef4444';
+        mm.beginPath(); mm.arc(x, y, 3, 0, Math.PI * 2); mm.fill();
       }
-      for (const c of G.police) {
-        ctx.fillStyle = '#ff1744';
-        ctx.beginPath();
-        ctx.arc(px(c.x), px(c.z), 3.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      // player arrow
-      const p = G.player;
-      ctx.save();
-      ctx.translate(px(p.x), px(p.z));
-      ctx.rotate(Math.atan2(Math.sin(p.yaw), Math.cos(p.yaw)) + Math.PI);
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath();
-      ctx.moveTo(0, -7);
-      ctx.lineTo(5, 6);
-      ctx.lineTo(-5, 6);
-      ctx.closePath();
-      ctx.fill();
-      ctx.restore();
-      // north tick
-      ctx.fillStyle = '#fff';
-      ctx.font = 'bold 11px sans-serif';
-      ctx.fillText('N', 4, 12);
+      // Player arrow.
+      mm.save();
+      mm.translate(w / 2, h / 2);
+      mm.rotate(-yaw);
+      mm.fillStyle = '#22c55e';
+      mm.beginPath(); mm.moveTo(0, -7); mm.lineTo(5, 6); mm.lineTo(-5, 6); mm.closePath(); mm.fill();
+      mm.restore();
     },
   };
-  G.hud = hud;
-  return hud;
 }

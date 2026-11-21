@@ -1,119 +1,105 @@
-// Ambient life: traffic cars looping the road grid and pedestrians on
-// the sidewalks. Traffic follows the roads; pedestrians wander blocks.
+// Traffic cars on lanes + pedestrians on sidewalks.
 
-import { VEHICLE_DEFS, WORLD } from './config.js';
-import { makeRng, WORLD_SEED } from './random.js';
-import { createCarMesh } from './vehicles.js';
+import { CONFIG } from './config.js';
 
-const PED_COLORS = [0xe53935, 0x1e88e5, 0x43a047, 0xfdd835, 0x8e24aa, 0xfb8c00, 0x00acc1, 0xec407a];
+export function createTraffic(scene, city, vehicles, rng) {
+  const cars = [];
+  const peds = [];
+  const carTypes = ['sedan', 'suv', 'taxi', 'truck', 'comet'];
 
-export function spawnTraffic(G, count) {
-  const rng = makeRng(WORLD_SEED + 77);
-  for (let i = 0; i < count; i++) {
-    const def = rng.pick(VEHICLE_DEFS);
-    const color = rng.pick(['#9e9e9e', '#37474f', '#6d4c41', '#33691e', '#01579b', '#4e342e', '#b0bec5']);
-    const road = rng.pick([-900, -700, -500, -300, -100, 100, 300, 500, 700, 900]);
-    const along = rng.range(-900, 900);
-    const horizontal = rng.chance(0.5);
-    const x = horizontal ? along : road + (rng.chance(0.5) ? 3.5 : -3.5);
-    const z = horizontal ? road + (rng.chance(0.5) ? 3.5 : -3.5) : along;
-    const { group, wheels } = createCarMesh(def, color, false);
-    group.position.set(x, 0, z);
-    const yaw = horizontal ? (rng.chance(0.5) ? Math.PI / 2 : -Math.PI / 2) : (rng.chance(0.5) ? 0 : Math.PI);
-    group.rotation.y = yaw;
-    G.scene.add(group);
-    G.traffic.push({
-      group, wheels, def, x, z, yaw, speed: rng.range(8, 13),
-      horizontal, road, dir: rng.chance(0.5) ? 1 : -1, wobble: rng.range(0, Math.PI * 2),
-    });
+  // Traffic lights at the main intersections (cycle with time).
+  const lights = [];
+  for (let ix = -2; ix <= 2; ix++) {
+    for (let iz = -2; iz <= 2; iz++) {
+      lights.push({ x: ix * CONFIG.roadGap, z: iz * CONFIG.roadGap, phase: rng.next() * 8 });
+    }
   }
-}
 
-export function spawnPedestrians(G, count) {
-  const rng = makeRng(WORLD_SEED + 131);
-  const shirtMat = PED_COLORS.map((c) => new THREE.MeshLambertMaterial({ color: c }));
-  const skinMat = new THREE.MeshLambertMaterial({ color: 0xc68863 });
-  const pantsMat = new THREE.MeshLambertMaterial({ color: 0x263238 });
-  for (let i = 0; i < count; i++) {
-    const grp = new THREE.Group();
-    const shirt = rng.pick(shirtMat);
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.62, 0.3), shirt);
-    torso.position.y = 1.0;
-    grp.add(torso);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.32, 0.28), skinMat);
-    head.position.y = 1.5;
-    grp.add(head);
-    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.62, 0.22), pantsMat);
-    legL.position.set(-0.14, 0.31, 0);
-    grp.add(legL);
-    const legR = legL.clone();
-    legR.position.x = 0.14;
-    grp.add(legR);
+  function spawnCar() {
+    const type = rng.pick(carTypes);
+    const horizontal = rng.chance(0.5);
+    const lane = rng.int(-4, 4) * CONFIG.roadGap + (rng.chance(0.5) ? 6 : -6);
+    const x = horizontal ? rng.range(-900, 900) : lane;
+    const z = horizontal ? lane : rng.range(-900, 900);
+    const car = vehicles.spawn(type, x, z, horizontal ? (rng.chance(0.5) ? Math.PI / 2 : -Math.PI / 2) : (rng.chance(0.5) ? 0 : Math.PI));
+    car.driver = 'traffic';
+    car.cruise = rng.range(10, 18);
+    car.horizontal = horizontal;
+    cars.push(car);
+    return car;
+  }
+
+  function spawnPed() {
+    const g = new THREE.Group();
+    const color = rng.pick([0xdc2626, 0x2563eb, 0x16a34a, 0xf59e0b, 0x9333ea, 0xec4899]);
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 1.1, 0.35), new THREE.MeshLambertMaterial({ color }));
+    body.position.y = 0.9;
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), new THREE.MeshLambertMaterial({ color: 0xe8b98a }));
+    head.position.y = 1.7;
+    g.add(body, head);
     const x = rng.range(-900, 900);
     const z = rng.range(-900, 900);
-    grp.position.set(x, 0, z);
-    G.scene.add(grp);
-    G.pedestrians.push({
-      group: grp, legL, legR, x, z,
-      yaw: rng.range(0, Math.PI * 2), speed: rng.range(1.2, 2.4),
-      phase: rng.range(0, Math.PI * 2), down: false, downT: 0,
-    });
+    g.position.set(x, 0, z);
+    scene.add(g);
+    const ped = { mesh: g, pos: g.position, heading: rng.next() * Math.PI * 2, speed: rng.range(1, 2.2), panic: 0 };
+    peds.push(ped);
+    return ped;
   }
-}
 
-export function updateTraffic(G, dt) {
-  for (const t of G.traffic) {
-    const step = t.speed * t.dir * dt;
-    if (t.horizontal) {
-      t.x += step;
-      if (t.x > 950 || t.x < -950) {
-        t.dir *= -1;
-        t.yaw += Math.PI;
-      }
-    } else {
-      t.z += step;
-      if (t.z > 950 || t.z < -950) {
-        t.dir *= -1;
-        t.yaw += Math.PI;
-      }
-    }
-    t.group.position.set(t.x, 0, t.z);
-    t.group.rotation.y = t.yaw;
-    for (const w of t.wheels) w.rotation.x += t.speed * dt * 2.2;
-  }
-  for (const ped of G.pedestrians) {
-    if (ped.down) {
-      ped.downT -= dt;
-      ped.group.rotation.x = Math.min(Math.PI / 2, ped.group.rotation.x + dt * 4);
-      if (ped.downT <= 0) {
-        ped.down = false;
-        ped.group.rotation.x = 0;
-      }
-      continue;
-    }
-    ped.phase += dt * 6;
-    const nx = ped.x + Math.sin(ped.yaw) * ped.speed * dt;
-    const nz = ped.z + Math.cos(ped.yaw) * ped.speed * dt;
-    if (Math.abs(nx) > 940 || Math.abs(nz) > 940) ped.yaw += Math.PI / 2;
-    else {
-      ped.x = nx;
-      ped.z = nz;
-    }
-    if (Math.random() < dt * 0.02) ped.yaw += (Math.random() - 0.5) * 1.6;
-    ped.group.position.set(ped.x, 0, ped.z);
-    ped.group.rotation.y = ped.yaw;
-    const swing = Math.sin(ped.phase) * 0.45;
-    ped.legL.rotation.x = swing;
-    ped.legR.rotation.x = -swing;
-  }
-}
+  for (let i = 0; i < 14; i++) spawnCar();
+  for (let i = 0; i < 24; i++) spawnPed();
 
-// A pedestrian hit by a car goes down and raises the heat.
-export function hitPedestrian(G, ped) {
-  if (ped.down) return;
-  ped.down = true;
-  ped.downT = 6;
-  G.heat += 60;
-  G.kills += 1;
-  if (G.audio) G.audio.thud();
+  return {
+    cars, peds, lights,
+    count: { cars: () => cars.length, peds: () => peds.length },
+    update(dt, playerPos, weather, time) {
+      // Traffic light phase.
+      for (const l of lights) l.phase = (l.phase + dt) % 16;
+      for (const car of cars) {
+        // Stop at a red light near an intersection.
+        let stop = false;
+        for (const l of lights) {
+          const d = Math.hypot(car.pos.x - l.x, car.pos.z - l.z);
+          if (d < 30 && l.phase < 8) { stop = true; break; }
+        }
+        // Swerve away from the player.
+        const pd = Math.hypot(car.pos.x - playerPos.x, car.pos.z - playerPos.z);
+        const target = stop ? 0 : car.cruise;
+        car.speed += (target - car.speed) * Math.min(1, dt * 2);
+        if (pd < 12 && pd > 0.01) {
+          car.pos.x += (car.pos.x - playerPos.x) / pd * dt * 6;
+          car.pos.z += (car.pos.z - playerPos.z) / pd * dt * 6;
+        }
+        car.pos.x += Math.sin(car.heading) * car.speed * dt;
+        car.pos.z += Math.cos(car.heading) * car.speed * dt;
+        // Wrap around the city edge.
+        if (car.pos.x > 980) car.pos.x = -980;
+        if (car.pos.x < -980) car.pos.x = 980;
+        if (car.pos.z > 980) car.pos.z = -980;
+        if (car.pos.z < -980) car.pos.z = 980;
+        car.mesh.rotation.y = car.heading;
+        for (const w of car.wheels) w.rotation.x += car.speed * dt * 2;
+      }
+      for (const ped of peds) {
+        if (weather === 'rain' || ped.panic > 0) ped.speed = 5;
+        else ped.speed = 1.6;
+        ped.pos.x += Math.sin(ped.heading) * ped.speed * dt;
+        ped.pos.z += Math.cos(ped.heading) * ped.speed * dt;
+        if (Math.abs(ped.pos.x) > 950 || Math.abs(ped.pos.z) > 950 || rng.chance(dt * 0.05)) {
+          ped.heading = rng.next() * Math.PI * 2;
+        }
+        ped.panic = Math.max(0, ped.panic - dt);
+        ped.mesh.rotation.y = ped.heading;
+        ped.mesh.position.y = Math.abs(Math.sin(time * 6 + ped.pos.x)) * 0.05;
+      }
+    },
+    panicNear(x, z, r) {
+      for (const ped of peds) {
+        if (Math.hypot(ped.pos.x - x, ped.pos.z - z) < r) {
+          ped.panic = 3;
+          ped.heading = Math.atan2(ped.pos.x - x, ped.pos.z - z);
+        }
+      }
+    },
+  };
 }

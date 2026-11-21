@@ -1,176 +1,68 @@
-// Vice Bay: Blood & Destiny — world constants, districts and shared state.
-// The city of Vice Bay is a 2 km x 2 km coastal open world. Coordinates are
-// metres; x east, z south, y up. The ground plane spans [-1000, 1000] on x/z.
+// Vice Bay: Blood & Destiny — tuning, districts, vehicles, weapons, missions.
+// All constants; nothing here touches the network.
 
-export const WORLD = {
-  size: 2000,
-  half: 1000,
-  roadSpacing: 200,
-  roadHalfWidth: 7,
-  sidewalkWidth: 3,
-  blockSize: 186,
-  waterLevel: -0.4,
-  seaMargin: 260,
+export const CONFIG = {
+  worldSize: 2000,
+  roadGap: 200,
+  blockSize: 160,
+  dayLength: 240, // seconds per full day/night cycle
   gravity: 22,
-};
-
-export const TIME = {
-  dawn: 6.6,
-  morning: 9.1,
-  noon: 13.0,
-  afternoon: 15.9,
-  dusk: 18.4,
-  night: 0.45,
-};
-
-// Eight districts. bounds are [minX, maxX, minZ, maxZ] in metres.
-export const DISTRICTS = [
-  {
-    id: 'downtown', name: 'Downtown', bounds: [-320, 320, -320, 320],
-    style: 'tower', hMin: 55, hMax: 150, density: 0.9,
-    palette: ['#2b3a55', '#3a4a6b', '#223044', '#46587c'],
-    ground: '#3d4450', accent: '#ffd166',
-  },
-  {
-    id: 'marina', name: 'Marina Bay', bounds: [640, 1000, -320, 320],
-    style: 'marina', hMin: 12, hMax: 42, density: 0.55,
-    palette: ['#e8e2d4', '#cfd8dc', '#f5f0e6', '#b8c4cc'],
-    ground: '#7d8a7a', accent: '#4dd0e1',
-  },
-  {
-    id: 'oldtown', name: 'Old Town', bounds: [-1000, -340, -1000, -340],
-    style: 'brick', hMin: 10, hMax: 26, density: 0.75,
-    palette: ['#8d5a3b', '#a06b45', '#7a4e33', '#b98a5e'],
-    ground: '#6b5a48', accent: '#ffb74d',
-  },
-  {
-    id: 'industrial', name: 'Ironworks', bounds: [-1000, -340, 340, 1000],
-    style: 'warehouse', hMin: 9, hMax: 20, density: 0.5,
-    palette: ['#5d6b73', '#4e5a61', '#6e7c85', '#45525a'],
-    ground: '#54504a', accent: '#ff8a65',
-  },
-  {
-    id: 'suburbs', name: 'Palm Suburbs', bounds: [340, 1000, -1000, -340],
-    style: 'house', hMin: 6, hMax: 12, density: 0.6,
-    palette: ['#f2e3c6', '#e8d5b0', '#dfe8d8', '#ecd9c0'],
-    ground: '#5d7a52', accent: '#aed581',
-  },
-  {
-    id: 'beach', name: 'Beachfront', bounds: [-340, 640, 640, 1000],
-    style: 'beach', hMin: 8, hMax: 22, density: 0.45,
-    palette: ['#f7ead0', '#efe0c0', '#e6d3ae', '#faf3e0'],
-    ground: '#d9c48f', accent: '#ffcc80',
-  },
-  {
-    id: 'university', name: 'University Hill', bounds: [-340, 340, -1000, -340],
-    style: 'campus', hMin: 10, hMax: 30, density: 0.6,
-    palette: ['#9c6b4f', '#b98a6a', '#7d5a44', '#c49a76'],
-    ground: '#5a6e52', accent: '#fff176',
-  },
-  {
-    id: 'port', name: 'Port Delgado', bounds: [640, 1000, 340, 1000],
-    style: 'port', hMin: 10, hMax: 26, density: 0.5,
-    palette: ['#546e7a', '#455a64', '#607d8b', '#37474f'],
-    ground: '#4e5458', accent: '#ffd54f',
-  },
-];
-
-export const PLAYER = {
   walkSpeed: 6,
-  runSpeed: 11,
-  accel: 40,
-  jumpSpeed: 8,
-  radius: 0.55,
-  height: 1.8,
-  health: 100,
+  runSpeed: 10,
+  jumpSpeed: 9,
+  saveKey: 'vicebay-save-v1',
+  playerName: 'Rico',
 };
 
-export const VEHICLE_DEFS = [
-  { id: 'sedan', name: 'Vice Sedan', price: 1200, topSpeed: 38, accel: 16, grip: 2.6, color: '#b71c1c', seats: 4 },
-  { id: 'coupe', name: 'Comet Coupe', price: 6500, topSpeed: 52, accel: 24, grip: 3.1, color: '#f9a825', seats: 2 },
-  { id: 'suv', name: 'Bay SUV', price: 4200, topSpeed: 42, accel: 18, grip: 2.8, color: '#1565c0', seats: 5 },
-  { id: 'van', name: 'Cargo Van', price: 2800, topSpeed: 33, accel: 12, grip: 2.2, color: '#e0e0e0', seats: 3 },
-  { id: 'muscle', name: 'Blood Muscle', price: 9800, topSpeed: 55, accel: 26, grip: 2.9, color: '#4a148c', seats: 2 },
-  { id: 'taxi', name: 'Bay Taxi', price: 3000, topSpeed: 40, accel: 17, grip: 2.7, color: '#fdd835', seats: 4 },
+export const DISTRICTS = [
+  { name: 'Downtown',          color: 0x3a6ea5, x: 0,    z: 0,    w: 420, h: 420 },
+  { name: 'Ocean Beach',       color: 0x2e8b8b, x: -750, z: 750,  w: 420, h: 420 },
+  { name: 'Little Havana',     color: 0xd97b29, x: -750, z: -750, w: 420, h: 420 },
+  { name: 'Industrial Port',   color: 0x6b7280, x: 750,  z: -750, w: 420, h: 420 },
+  { name: 'Rich Hills',        color: 0x7a5c2e, x: 750,  z: 750,  w: 420, h: 420 },
+  { name: 'Airport',           color: 0x4b5563, x: 0,    z: -850, w: 500, h: 260 },
+  { name: 'Criminal District', color: 0x8b1e1e, x: -850, z: 0,    w: 260, h: 500 },
+  { name: 'Highway Ring',      color: 0x374151, x: 0,    z: 850,  w: 900, h: 260 },
 ];
 
-export const POLICE_DEFS = {
-  car: { topSpeed: 46, accel: 20, grip: 3.0, color: '#eceff1' },
-  spawnDistance: 120,
-  maxActive: 6,
-  catchRadius: 4,
-  bustedFine: 500,
+export const VEHICLE_TYPES = {
+  comet:  { name: 'Comet GT',       color: 0xd21f2b, maxSpeed: 52, accel: 16, grip: 0.92, seats: 2, price: 12000 },
+  sedan:  { name: 'Sultan',         color: 0x2b3a67, maxSpeed: 38, accel: 11, grip: 0.9,  seats: 4, price: 4000 },
+  suv:    { name: 'Patriot',        color: 0x374151, maxSpeed: 34, accel: 10, grip: 0.88, seats: 5, price: 6500 },
+  taxi:   { name: 'Taxi',           color: 0xfacc15, maxSpeed: 36, accel: 11, grip: 0.9,  seats: 4, price: 3000 },
+  truck:  { name: 'Benson',         color: 0x9ca3af, maxSpeed: 28, accel: 8,  grip: 0.85, seats: 2, price: 8000 },
+  bike:   { name: 'PCJ 600',        color: 0x111827, maxSpeed: 48, accel: 18, grip: 0.8,  seats: 1, price: 9000 },
+  police: { name: 'Police Cruiser', color: 0x111827, maxSpeed: 46, accel: 15, grip: 0.93, seats: 2, price: 0 },
 };
 
-export const ECONOMY = {
-  startMoney: 250,
-  taxiFare: 60,
-  deliveryPay: 90,
-  stuntPay: 150,
-  repairCost: 120,
+export const WEAPONS = {
+  fists:   { name: 'Fists',   damage: 12, rate: 2.5, mag: Infinity, range: 2.5, auto: false },
+  pistol:  { name: 'Pistol',  damage: 22, rate: 3.5, mag: 12, range: 60,  auto: false },
+  smg:     { name: 'SMG',     damage: 12, rate: 11,  mag: 32, range: 45,  auto: true, spread: 0.06 },
+  shotgun: { name: 'Shotgun', damage: 16, rate: 1.2, mag: 6,  range: 22,  auto: false, pellets: 6, spread: 0.12 },
+  rifle:   { name: 'Rifle',   damage: 45, rate: 1.6, mag: 20, range: 120, auto: false },
 };
 
-export const WANTED = {
-  // heat points added by each crime; stars = thresholds below
-  stealCar: 25,
-  assault: 30,
-  shoot: 45,
-  kill: 60,
-  speeding: 0,
-  thresholds: [0, 20, 45, 75, 110, 150],
-  decayPerSecond: 1.6,
-  decayHiddenMultiplier: 2.5,
-};
+export const STORY_MISSIONS = [
+  { id: 1, name: 'Welcome to Vice Bay', desc: 'Rico arrives. Meet your contact at the pier.', reward: 500, steps: [{ text: 'Reach the pier', x: -700, z: 700 }, { text: 'Meet the contact', x: -680, z: 680 }] },
+  { id: 2, name: 'A Dangerous Favor', desc: 'Deliver the package to Little Havana.', reward: 900, steps: [{ text: 'Pick up the package', x: -400, z: -400 }, { text: 'Deliver it to the market', x: -750, z: -750 }] },
+  { id: 3, name: 'Street Reputation', desc: 'Take down three rivals in the Criminal District.', reward: 1200, steps: [{ text: 'Find the rivals', x: -850, z: 0 }, { text: 'Finish the job', x: -850, z: 40 }] },
+  { id: 4, name: 'The Getaway', desc: 'Steal a Comet GT and lose the cops.', reward: 1500, steps: [{ text: 'Steal the Comet GT downtown', x: 100, z: 100 }, { text: 'Lose the police', x: 500, z: 500 }] },
+  { id: 5, name: 'The Missing Deal', desc: 'The deal went bad. Recover the cash at the port.', reward: 2000, steps: [{ text: 'Reach the Industrial Port', x: 750, z: -750 }, { text: 'Grab the cash', x: 780, z: -720 }] },
+  { id: 6, name: 'Betrayal', desc: 'Your old friend sold you out. Confront him at Rich Hills.', reward: 2500, steps: [{ text: 'Reach the Rich Hills mansion', x: 750, z: 750 }, { text: 'Confront the traitor', x: 770, z: 770 }] },
+  { id: 7, name: 'Night Run', desc: 'Smuggle cargo across the city at night.', reward: 3000, steps: [{ text: 'Pick up the cargo at the airport', x: 0, z: -850 }, { text: 'Drop it at Ocean Beach', x: -750, z: 750 }] },
+  { id: 8, name: 'The Hidden Truth', desc: 'Find the ledger hidden in the Criminal District.', reward: 3500, steps: [{ text: 'Search the hideout', x: -850, z: -100 }, { text: 'Take the ledger to the beach', x: -750, z: 750 }] },
+  { id: 9, name: 'Final Assault', desc: 'Storm the port compound and end the cartel.', reward: 5000, steps: [{ text: 'Breach the compound', x: 750, z: -750 }, { text: 'Take out the boss', x: 790, z: -790 }] },
+  { id: 10, name: 'Blood & Destiny', desc: 'One last meeting at the pier. Rico decides who runs Vice Bay.', reward: 8000, steps: [{ text: 'Meet at the pier one last time', x: -700, z: 700 }, { text: 'Make your choice', x: -690, z: 690 }] },
+];
 
-export function districtAt(x, z) {
-  for (const d of DISTRICTS) {
-    const b = d.bounds;
-    if (x >= b[0] && x <= b[1] && z >= b[2] && z <= b[3]) return d;
-  }
-  return DISTRICTS[0];
-}
-
-export function clamp(v, a, b) {
-  return v < a ? a : v > b ? b : v;
-}
-
-export function lerp(a, b, t) {
-  return a + (b - a) * t;
-}
-
-// The single mutable game state object. Systems receive it and mutate it.
-export function createState() {
-  return {
-    time: 9.1,
-    timeScale: 1,
-    paused: false,
-    money: ECONOMY.startMoney,
-    health: PLAYER.health,
-    wanted: 0,
-    heat: 0,
-    hidden: false,
-    bustedCount: 0,
-    kills: 0,
-    carsStolen: 0,
-    missionsDone: [],
-    activeMission: null,
-    missionStep: 0,
-    ownedCars: ['sedan'],
-    garage: [],
-    player: null,
-    vehicles: [],
-    traffic: [],
-    pedestrians: [],
-    police: [],
-    scene: null,
-    camera: null,
-    renderer: null,
-    clock: null,
-    hud: null,
-    input: null,
-    audio: null,
-    save: null,
-    shots: null,
-    stats: { distance: 0, topSpeed: 0, shotsFired: 0 },
-  };
-}
+export const SIDE_MISSIONS = [
+  { id: 'taxi',      name: 'Taxi Fares',        desc: 'Pick up fares around the city.', reward: 300 },
+  { id: 'race',      name: 'Street Racing',     desc: 'Beat the rival through the checkpoints.', reward: 800 },
+  { id: 'delivery',  name: 'Vehicle Delivery',  desc: 'Deliver the car in one piece.', reward: 600 },
+  { id: 'escape',    name: 'Police Escape',     desc: 'Lose a 3-star wanted level.', reward: 700 },
+  { id: 'packages',  name: 'Hidden Packages',   desc: 'Find the glowing packages.', reward: 250 },
+  { id: 'territory', name: 'Territory Takeover', desc: 'Clear the block of rivals.', reward: 900 },
+  { id: 'timetrial', name: 'Time Trial',        desc: 'Reach the beach before the timer ends.', reward: 500 },
+  { id: 'rescue',    name: 'Rescue Civilians',  desc: 'Escort civilians out of the danger zone.', reward: 650 },
+];

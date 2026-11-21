@@ -1,46 +1,26 @@
-// Deterministic seeded random numbers for Vice Bay.
-// Every procedural part of the city uses one seeded stream so the world
-// looks identical on every load and every machine.
+// Seeded PRNG (sfc32) so the city, traffic and shots are deterministic per seed.
 
-export function mulberry32(seed) {
-  let a = seed >>> 0;
+export function sfc32(a, b, c, d) {
+  let _a = a >>> 0, _b = b >>> 0, _c = c >>> 0, _d = d >>> 0;
   return function next() {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    _a >>>= 0; _b >>>= 0; _c >>>= 0; _d >>>= 0;
+    let t = (_a + _b | 0) + _d | 0;
+    _d = _d + 1 | 0;
+    _a = _b ^ _b >>> 9;
+    _b = _c + (_c << 3) | 0;
+    _c = _c << 21 | _c >>> 11;
+    _c = _c + t | 0;
+    return (t >>> 0) / 4294967296;
   };
-}
-
-export function hash2(x, z, seed) {
-  let h = (Math.imul(x | 0, 374761393) + Math.imul(z | 0, 668265263) + Math.imul(seed | 0, 974634211)) | 0;
-  h = Math.imul(h ^ (h >>> 13), 1274126177);
-  h ^= h >>> 16;
-  return (h >>> 0) / 4294967296;
 }
 
 export function makeRng(seed) {
-  const next = mulberry32(seed);
+  const rand = sfc32(seed, seed * 31 + 7, seed * 101 + 13, seed * 7 + 1);
   return {
-    next,
-    range(a, b) {
-      return a + (b - a) * next();
-    },
-    int(a, b) {
-      return Math.floor(a + (b - a + 1) * next());
-    },
-    pick(arr) {
-      return arr[Math.floor(next() * arr.length)];
-    },
-    chance(p) {
-      return next() < p;
-    },
-    // Deterministic per-cell value in [0, 1): same input, same output.
-    cell(x, z) {
-      return hash2(x, z, seed);
-    },
+    next: rand,
+    range(min, max) { return min + rand() * (max - min); },
+    int(min, max) { return Math.floor(this.range(min, max + 1)); },
+    pick(arr) { return arr[Math.floor(rand() * arr.length)]; },
+    chance(p) { return rand() < p; },
   };
 }
-
-export const WORLD_SEED = 20261121;

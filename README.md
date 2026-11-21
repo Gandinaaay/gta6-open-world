@@ -1,60 +1,30 @@
-[![Make GTA 6](https://make.fun/badge/gta6-01.svg)](https://make.fun/bounty/gta6-01)
-[![Rank](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/rank.svg)](https://make.fun/bounty/gta6-01)
-[![Reward](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/reward.svg)](https://make.fun/bounty/gta6-01)
-
 # Vice Bay: Blood & Destiny
 
-An original open-world crime game built for the [Make GTA 6](https://make.fun/bounty/gta6-01) bounty on make.fun — in the spirit of GTA 6, with its own city, characters, vehicles, names, story, art and sound. No Rockstar Games name, logo, character, map or asset.
+![make.fun](https://make.fun/badge/gta6-01.svg)
+![Rank](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/rank.svg)
+![Reward](https://make.fun/badge/gta6-01/Gandinaaay/gta6-open-world/reward.svg)
 
-Rico just docked in Vice Bay with $250 and a borrowed jacket. Run missions for Mama Rosa and Don Sal, steal cars, outrun the Vice Bay police, build a garage of fast cars, and take the city — from the first pickup to the finale, **Blood & Destiny**.
+An original open-world crime game for the [make.fun](https://make.fun/bounty/gta6-01) gta6-01 bounty — built with Three.js, playable in a desktop browser from static files, no network needed. You play **Rico**, a newcomer who has to run the city — or be run out of it.
 
-## Play it
+## How to play
 
-```sh
-node serve.ts
-# open http://localhost:8080/game/
-```
+Open `game/index.html` in a desktop browser (or serve the repo: `node serve.ts`, then http://127.0.0.1:8080/).
 
-Or open `game/index.html` directly in a desktop browser. No build step, no network: Three.js is vendored under `game/vendor/`, all art and sound are procedural.
+- **WASD** — walk / drive · **Shift** — run · **Space** — jump / handbrake
+- **E** — enter / exit / steal a car · **Mouse drag** — camera pitch · **Click** — shoot
+- **1–5** — fists / pistol / SMG / shotgun / rifle · **R** — reload
+- **M** — missions menu · **Esc** — pause
 
-## What is in the game
+## The game
 
-- **A 2 km × 2 km coastal city** — 8 districts (Downtown, Marina Bay, Old Town, Ironworks, Palm Suburbs, Beachfront, University Hill, Port Delgado), a bay bridge, a beach pier and the 185 m Vice Tower.
-- **On foot and by car** — third-person walking and jumping, 6 drivable car models, arcade driving, car stealing (press E), a garage with owned cars.
-- **Traffic and pedestrians** — cars looping the road grid, pedestrians on the sidewalks.
-- **Wanted system and police** — 1–5 stars driven by a heat meter; interceptors chase, bust and fine Rico; hide to cool off.
-- **Missions and a story** — 10 main missions (Fresh Off the Boat → Blood & Destiny) and 8 side jobs (taxi, pizza, stunt jump, vigilante, courier, street race, photo spots, ambulance), with a beacon, a mission menu (M) and cash rewards.
-- **Combat** — fists (F) and a pistol (click to shoot), with a hitscan raycast and a muzzle flash.
-- **HUD with a minimap** — money, health, wanted stars, clock, district name, objective tracker and a live minimap with the player, police, traffic and the mission marker.
-- **A start screen and a save** — progress (money, garage, finished missions) persists in localStorage.
-- **Procedural sound** — engine hum, sirens, gunshots and jingles, all synthesised with WebAudio.
+Vice Bay is a 2 km × 2 km coastal city with 8 districts: Downtown, Ocean Beach, Little Havana, Industrial Port, Rich Hills, Airport, Criminal District and the Highway Ring. Drive or walk anywhere, steal cars, dodge traffic and pedestrians, and outrun the police as your wanted level climbs from 1 to 5 stars.
 
-## Controls
+**Story (10 missions):** Welcome to Vice Bay, A Dangerous Favor, Street Reputation, The Getaway, The Missing Deal, Betrayal, Night Run, The Hidden Truth, Final Assault, and Blood & Destiny — ending in a choice that decides who runs the city.
 
-| Key | Action |
-| --- | --- |
-| WASD / arrows | Move / drive |
-| Mouse (drag) | Orbit camera |
-| Shift | Run |
-| Space | Jump |
-| E | Enter / exit car |
-| F | Punch |
-| Click | Shoot |
-| H | Horn |
-| M | Missions |
-| P | Pause |
+**Side missions (8):** taxi fares, street racing, vehicle delivery, police escape, hidden packages, territory takeover, time trial, rescue civilians.
 
-## Build the dossier
+**Systems:** HUD with health, money, reputation, wanted stars, speed, compass and a live minimap; shops, garage and upgrades; localStorage save; day/night cycle and rain; fully synthesized WebAudio sound; canvas-painted textures and neon signs.
 
-```sh
-node main.ts
-# writes dossier.json + game/ + screenshots/ to $MAKEFUN_OUTPUT_DIR (default: ./out)
-```
+## Build
 
-## Referral
-
-Built with make.fun — try it yourself: https://make.fun/r/fywkmv2t
-
-## License
-
-MIT — see [LICENSE](LICENSE).
+`node main.ts` copies `game/` + `screenshots/` to the output directory (`$MAKEFUN_OUTPUT_DIR`, default `/output`) and writes `dossier.json` there. Paths are resolved from the location of `main.ts` itself, so it works from any working directory.
